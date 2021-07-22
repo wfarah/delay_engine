@@ -1,15 +1,10 @@
 import numpy as np
-import matplotlib.pyplot as plt
-import glob
-from shutil import copyfile as cp
 
 from phasing import compute_uvw, compute_antenna_gainphase
 from astropy.coordinates import ITRS, SkyCoord, AltAz, EarthLocation
 from astropy.time import Time,TimeDelta
 import pandas as pd
 import time, os
-
-from guppi import guppi
 
 import argparse
 
