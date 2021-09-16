@@ -19,7 +19,7 @@ ANTNAMES = ['1A', '1F', '1C', '1K', '1H', '1E', '1G',
 WD = os.path.realpath(os.path.dirname(__file__))
 DEFAULT_ANT_ITRF = os.path.join(WD, "ant_itrf.txt")
 DEFAULT_REF_ANT = "1C" #1c is a performant antenna
-MAX_DELAY = 1e-6 #seconds
+MAX_DELAY = 4e-6 #seconds
 
 
 def main():
@@ -42,11 +42,13 @@ def main():
 
     # Add fixed delays
     if not args.fixed:
-        fixed_delays = np.zeros_like(ANTNAMES)
+        fixed_delays = np.zeros_like(ANTNAMES, dtype=np.float32)
     else:
-        fixed_delays = np.array(args.fixed)
+        fixed_delays = np.array(args.fixed, dtype=np.float)
         assert len(fixed_delays) == len(ANTNAMES),\
                 "Make sure fixed delays match number of antennas"
+        assert max(fixed_delays) < MAX_DELAY,\
+                "Fixed delays provided are large"
 
 
     # Get ITRF coordinates of the antennas
@@ -69,20 +71,27 @@ def main():
 
         ts = Time(tts, format='unix')
 
+        # perform coordinate transformation to uvw
         uvw1 = compute_uvw(ts[0],  source, itrf_sub[['x','y','z']], itrf_sub[['x','y','z']].values[irefant])
         uvw2 = compute_uvw(ts[-1], source, itrf_sub[['x','y','z']], itrf_sub[['x','y','z']].values[irefant])
 
+        # "w" coordinate represents the goemetric delay in light-meters
         w1 = uvw1[...,2]
         w2 = uvw2[...,2]
 
-        delay1 = w1/const.c.value
-        delay2 = w2/const.c.value
+        # Add fixed delays + convert to seconds
+        delay1 = fixed_delays + (w1/const.c.value)
+        delay2 = fixed_delays + (w2/const.c.value)
 
+        # Compute the delay rate in s/s
         rate = (delay2 - delay1) / (tts[-1] - tts[0])
+
+        # Print values to screen, for now
         print("Time 0: ", ts[0], "Time 1: ", ts[-1])
-        print(delay1)
-        print(delay2)
-        print(rate)
+        print("delay1, delay2, rate (all in ns)")
+        print(delay1*1e9)
+        print(delay2*1e9)
+        print(rate*1e9)
 
         print("")
         time.sleep(5)
