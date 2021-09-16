@@ -18,7 +18,8 @@ ANTNAMES = ['1A', '1F', '1C', '1K', '1H', '1E', '1G',
         
 WD = os.path.realpath(os.path.dirname(__file__))
 DEFAULT_ANT_ITRF = os.path.join(WD, "ant_itrf.txt")
-DEFAULT_REF_ANT = "1C"
+DEFAULT_REF_ANT = "1C" #1c is a performant antenna
+MAX_DELAY = 1e-6 #seconds
 
 
 def main():
@@ -33,23 +34,38 @@ def main():
     parser.add_argument('-itrf', type=str,
         default = DEFAULT_ANT_ITRF, required = False,
         help = 'ITRF file [default: %s]' %DEFAULT_ANT_ITRF)
+    parser.add_argument('-fixed', required = False,
+        nargs='+', help = 'Fixed delays [sec], should match number of ants')
 
+    # Parse cmd line arguments
     args = parser.parse_args()
+
+    # Add fixed delays
+    if not args.fixed:
+        fixed_delays = np.zeros_like(ANTNAMES)
+    else:
+        fixed_delays = np.array(args.fixed)
+        assert len(fixed_delays) == len(ANTNAMES),\
+                "Make sure fixed delays match number of antennas"
+
 
     # Get ITRF coordinates of the antennas
     itrf = pd.read_csv(args.itrf, names=['x', 'y', 'z'], header=None, skiprows=1)
     itrf_sub = itrf.loc[ANTNAMES]
 
+    # Select reference antenna
     refant = args.refant.upper()
     irefant = itrf_sub.index.values.tolist().index(refant)
 
+    # Parse phase center coordinates
     ra = args.source_ra * 360 / 24.
     dec = args.source_dec
     source = SkyCoord(ra, dec, unit='deg')
 
     while True:
         t = np.floor(time.time())
-        tts = np.arange(-2, 10) + t
+        tts = [-2, 10] # Interpolate between t=-2 sec and t=10 sec
+        tts = np.array(tts) + t
 
         ts = Time(tts, format='unix')
 
