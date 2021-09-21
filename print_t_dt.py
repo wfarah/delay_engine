@@ -44,11 +44,14 @@ def main():
     if not args.fixed:
         fixed_delays = np.zeros_like(ANTNAMES, dtype=np.float32)
     else:
-        fixed_delays = np.array(args.fixed, dtype=np.float)
-        assert len(fixed_delays) == len(ANTNAMES),\
-                "Make sure fixed delays match number of antennas"
-        assert max(fixed_delays) < MAX_DELAY,\
-                "Fixed delays provided are large"
+        if len(args.fixed) == 1:
+            fixed_delays = np.array([args.fixed[0]]*len(ANTNAMES), dtype=np.float)
+        else:
+            fixed_delays = np.array(args.fixed, dtype=np.float)
+            assert len(fixed_delays) == len(ANTNAMES),\
+                    "Make sure fixed delays match number of antennas"
+            assert max(fixed_delays) < MAX_DELAY,\
+                    "Fixed delays provided are large"
 
 
     # Get ITRF coordinates of the antennas
