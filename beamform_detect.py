@@ -82,9 +82,18 @@ for ibeam in range(NBEAMS):
             x = output_data[ibeam, ichan, isamp*TFACT:isamp*TFACT+TFACT, 0] #just to make code more visible
             y = output_data[ibeam, ichan, isamp*TFACT:isamp*TFACT+TFACT, 1] #just to make code more visible
 
-            output_data_detected[ibeam, ichan, isamp, 0] = np.abs(np.sum(x * np.conj(x))) #XX
-            output_data_detected[ibeam, ichan, isamp, 1] = np.abs(np.sum(y * np.conj(y))) #YY
-            output_data_detected[ibeam, ichan, isamp, 2] = np.abs(np.sum(x * np.conj(y))) #XY
-            output_data_detected[ibeam, ichan, isamp, 3] = np.abs(np.sum(y * np.conj(x))) #YX
+            #x and y have shapes = [TFACT]
+
+            # the below is complex dot product (complex conjugate the second term), so can be expanded
+            auto_x = x*np.conj(x) # or: x.real*x.real + x.imag*x.imag... this will definitely be a real value, no .imag part
+            auto_y = y*np.conj(y) # or: x.real*y.real + y.imag*y.imag... this will definitely be a real value, no .imag part
+            cross  = x*np.conj(y) # or:
+            #                           cross_real = x.real * x.real + y.real*y.real
+            #                           cross_imag = -x.real * y.imag + y.real*x.imag
+
+            output_data_detected[ibeam, ichan, isamp, 0] = np.sum(auto_x.real) #real is actually abs() too, because x*xT
+            output_data_detected[ibeam, ichan, isamp, 1] = np.sum(auto_y.real) #real is actually abs() too, because y*yT
+            output_data_detected[ibeam, ichan, isamp, 2] = np.sum(cross.real)
+            output_data_detected[ibeam, ichan, isamp, 3] = np.sum(cross.imag)
 
 # incoherent sum will be zeros at this point, we'll figure out what to do with it
