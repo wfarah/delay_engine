@@ -86,9 +86,9 @@ for ibeam in range(NBEAMS):
 
             # the below is complex dot product (complex conjugate the second term), so can be expanded
             auto_x = x*np.conj(x) # or: x.real*x.real + x.imag*x.imag... this will definitely be a real value, no .imag part
-            auto_y = y*np.conj(y) # or: x.real*y.real + y.imag*y.imag... this will definitely be a real value, no .imag part
+            auto_y = y*np.conj(y) # or: y.real*y.real + y.imag*y.imag... this will definitely be a real value, no .imag part
             cross  = x*np.conj(y) # or:
-            #                           cross_real = x.real * x.real + y.real*y.real
+            #                           cross_real =  x.real * x.real + y.real*y.real
             #                           cross_imag = -x.real * y.imag + y.real*x.imag
 
             output_data_detected[ibeam, ichan, isamp, 0] = np.sum(auto_x.real) #real is actually abs() too, because x*xT
