@@ -6,4 +6,4 @@ First go at delay engine for the ATA
 - astropy
 - pandas
 - numpy
-- [guppi package](https://github.com/wfarah/guppi)
+- [guppi package](https://github.com/wfarah/guppi) for the correlator
