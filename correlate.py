@@ -2,6 +2,7 @@ import numpy as np
 import sys
 from guppi import guppi
 # Guppi is a custom library, might need some tweeking too?
+import atexit
 
 # Let's assume the following
 # they should be true for our configuration
@@ -10,7 +11,7 @@ NCHANS  = 96*2 # number of channels per block
 NTIMES  = 8192 # number of time samples per block
 NPOLS   = 2    # number of polarisations per block
 NANTS   = 20   # number of antennas per block
-NFFT    = 4    # number of FFTs we want to take. 0.5/4 = 125 kHz channel width
+NFFT    = 1    # number of FFTs we want to take. 0.5/4 = 125 kHz channel width
 
 
 def do_npoint_spec(arr, nfft):
@@ -46,6 +47,9 @@ g = guppi.Guppi(fname)
 # i.e. the cross-multiplication data products
 vis = np.zeros((NBLOCKS, NANTS, NCHANS*NFFT, NPOLS*NPOLS), dtype=np.complex64)
 
+# Now we're done, write data to disk
+atexit.register(vis.tofile,outname)
+
 
 
 for iblock in range(NBLOCKS):
@@ -63,7 +67,7 @@ for iblock in range(NBLOCKS):
 
         for ichan in range(NCHANS):
             ch_ant    = ant[ichan]
-            ch_refant = ant[ichan]
+            ch_refant = ant_ref[ichan]
 
             ch_ant_fftd_x    = do_npoint_spec(ch_ant[:,0], NFFT)
             ch_ant_fftd_y    = do_npoint_spec(ch_ant[:,1], NFFT)
