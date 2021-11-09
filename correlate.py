@@ -15,7 +15,7 @@ NCHANS  = 96*2 # number of channels per block
 NTIMES  = 8192 # number of time samples per block
 NPOLS   = 2    # number of polarisations per block
 NANTS   = 20   # number of antennas per block
-NFFT    = 1    # number of FFTs we want to take. 0.5/4 = 125 kHz channel width
+NFFT    = 4    # number of FFTs we want to take. 0.5/4 = 125 kHz channel width
 
 @njit(fastmath=True)
 def fft4(z, out):
@@ -67,6 +67,7 @@ def do_npoint_spec(arr, nfft):
     return run(arr, nfft)
 
 
+assert NFFT in [1,4], "Only 4-point FFT is supported"
 assert NTIMES % NFFT == 0, "NFFT must divide NTIMES"
 
 iref_ant = 5 # this is the reference antenna ID that everything is multiplied against
@@ -77,7 +78,7 @@ fname = sys.argv[1]
 outname = "out_fast_ga_final.vis"
 
 # "Load" the guppi file
-# This does nothing except opening the file
+# This initialises an internal ring buffer to load data in
 g = guppi.Guppi(fname)
 
 # These are the "visibilities"
@@ -135,6 +136,3 @@ for iblock in range(NBLOCKS):
                 vis[iblock, iant, ichan*NFFT+ifft, 3] =\
                     np.vdot(ch_ant_fftd_y[:,ifft], ch_refant_fftd_x[:,ifft])
 
-
-# Now we're done, write data to disk
-vis.tofile(outname)
