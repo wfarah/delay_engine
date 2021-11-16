@@ -28,6 +28,8 @@ def main():
         help = 'Source RA [decimal hours]')
     parser.add_argument('-source_dec', type=float, required=True,
         help = 'Source Dec [degrees]')
+    parser.add_argument('-lo', type=float, required=True,
+        help = 'LO frequency [MHz]')
     parser.add_argument('-refant', type=str,
         default = DEFAULT_REF_ANT,
         help = 'Reference antenna')
@@ -90,13 +92,28 @@ def main():
         rate = (delay2 - delay1) / (tts[-1] - tts[0])
 
         # Print values to screen, for now
-        print("Time 0: ", ts[0], "Time 1: ", ts[-1])
-        print("delay1, delay2, rate (all in ns)")
+        #print("Time 0: ", ts[0], "Time 1: ", ts[-1])
+        #print("delay1, delay2, rate (all in ns)")
+        print("Delay [ns]")
         print(delay1*1e9)
-        print(delay2*1e9)
+        #print(delay2*1e9)
+        print("")
+        print("Delay rate [ns/s]")
         print(rate*1e9)
 
+        phase      = -2 * np.pi * args.lo*1e6 * delay1
+        phase_rate = -2 * np.pi * args.lo*1e6 * rate
+
         print("")
+        print("Phase [rad]")
+        print(phase)
+
+        print("")
+        print("Phase rate [rad/s]")
+        print(phase_rate)
+
+        print("="*79)
+
         time.sleep(5)
 
 
