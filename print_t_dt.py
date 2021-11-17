@@ -19,7 +19,12 @@ ANTNAMES = ['1A', '1F', '1C', '1K', '1H', '1E', '1G',
 WD = os.path.realpath(os.path.dirname(__file__))
 DEFAULT_ANT_ITRF = os.path.join(WD, "ant_itrf.txt")
 DEFAULT_REF_ANT = "1C" #1c is a performant antenna
-MAX_DELAY = 4e-6 #seconds
+MAX_SAMP_DELAY = 16384
+CLOCK_FREQ = 2.048e9 #Gsps
+ADC_SAMP_TIME = 1/CLOCK_FREQ
+
+MAX_DELAY = MAX_SAMP_DELAY * ADC_SAMP_TIME #seconds
+ADVANCE_TIME = MAX_DELAY/2
 
 
 def main():
@@ -36,8 +41,10 @@ def main():
     parser.add_argument('-itrf', type=str,
         default = DEFAULT_ANT_ITRF, required = False,
         help = 'ITRF file [default: %s]' %DEFAULT_ANT_ITRF)
-    parser.add_argument('-fixed', required = False,
-        nargs='+', help = 'Fixed delays [sec], should match number of ants')
+    parser.add_argument('-fixed', required = False, nargs='+',
+        help = 'Fixed delays [sec], should match number of ants')
+    parser.add_argument('-noadvance', action='store_true', default=False,
+        help = 'Do not advance the delay engine by the fixed term')
 
     # Parse cmd line arguments
     args = parser.parse_args()
@@ -71,7 +78,7 @@ def main():
 
     while True:
         t = np.floor(time.time())
-        tts = [-2, 10] # Interpolate between t=-2 sec and t=10 sec
+        tts = [3, 20+3] # Interpolate between t=3 sec and t=20 sec
         tts = np.array(tts) + t
 
         ts = Time(tts, format='unix')
@@ -88,12 +95,21 @@ def main():
         delay1 = fixed_delays + (w1/const.c.value)
         delay2 = fixed_delays + (w2/const.c.value)
 
+        # advance all the B-engines forward in time
+        if not args.noadvance:
+            delay1 += ADVANCE_TIME
+            delay2 += ADVANCE_TIME
+
+        # make sure we're not providing large delays
+        assert np.all((delay1 < MAX_DELAY) & (delay1 > 0)),\
+                "Delays are not within 0 and max_delay: %.2e" %MAX_DELAY
+        assert np.all((delay2 < MAX_DELAY) & (delay2 > 0)),\
+                "Delays are not within 0 and max_delay: %.2e" %MAX_DELAY
+
         # Compute the delay rate in s/s
         rate = (delay2 - delay1) / (tts[-1] - tts[0])
 
         # Print values to screen, for now
-        #print("Time 0: ", ts[0], "Time 1: ", ts[-1])
-        #print("delay1, delay2, rate (all in ns)")
         print("Delay [ns]")
         print(delay1*1e9)
         #print(delay2*1e9)
@@ -114,7 +130,7 @@ def main():
 
         print("="*79)
 
-        time.sleep(5)
+        time.sleep(10)
 
 
 if __name__ == "__main__":
