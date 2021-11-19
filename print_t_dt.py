@@ -95,6 +95,9 @@ def main():
         delay1 = fixed_delays + (w1/const.c.value)
         delay2 = fixed_delays + (w2/const.c.value)
 
+        delay1 = -delay1
+        delay2 = -delay2
+
         # advance all the B-engines forward in time
         if not args.noadvance:
             delay1 += ADVANCE_TIME
