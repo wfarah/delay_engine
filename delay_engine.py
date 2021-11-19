@@ -153,8 +153,8 @@ def main():
 
         for i,rfsoc in enumerate(rfsocs):
             rfsoc.set_delay_tracking(
-                    [delay1[i],     delay1[i]], 
-                    [rate[i],       rate[i]],
+                    [delay1[i]*1e9,     delay1[i]*1e9], 
+                    [rate[i]*1e9,       rate[i]*1e9],
                     [phase[i],      phase[i]],
                     [phase_rate[i], phase_rate[i]],
                     load_time = int(ts[0].unix)
