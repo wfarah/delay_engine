@@ -16,7 +16,9 @@ vis = np.fromfile(vis_name, dtype=np.complex64).\
         reshape((NFILES*NBLOCKS, NANTS, NCHANS*NFFT, NPOLS*NPOLS))
 
 for iant in range(NANTS):
-    plt.figure(iant)
-    plt.plot(np.angle(vis[:, iant, :, 0].sum(axis=-1)))
+    plt.figure(2*iant)
+    plt.plot(np.angle(vis[:, iant, :, 0].sum(axis=0)), ".")
+    plt.figure(2*iant+1)
+    plt.plot(np.abs(np.fft.ifftshift(np.fft.ifft(vis[:, iant, :, 0].sum(axis=0)))))
 
 plt.show()
