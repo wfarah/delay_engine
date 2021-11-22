@@ -51,29 +51,39 @@ def main():
     args = parser.parse_args()
 
     # Add fixed delays
-    if not args.fixed:
-        fixed_delays = np.zeros_like(ANTNAMES, dtype=np.float32)
-    else:
-        if len(args.fixed) == 1:
-            fixed_delays = np.array([args.fixed[0]]*len(ANTNAMES), dtype=np.float)
-        else:
-            fixed_delays = np.array(args.fixed, dtype=np.float)
-            assert len(fixed_delays) == len(ANTNAMES),\
-                    "Make sure fixed delays match number of antennas"
-            assert max(fixed_delays) < MAX_DELAY,\
-                    "Fixed delays provided are large"
+    #if not args.fixed:
+    #    fixed_delays = np.zeros_like(ANTNAMES, dtype=np.float32)
+    #else:
+    #    if len(args.fixed) == 1:
+    #        fixed_delays = np.array([args.fixed[0]]*len(ANTNAMES), dtype=np.float)
+    #    else:
+    #        fixed_delays = np.array(args.fixed, dtype=np.float)
+    #        assert len(fixed_delays) == len(ANTNAMES),\
+    #                "Make sure fixed delays match number of antennas"
+    #        assert max(fixed_delays) < MAX_DELAY,\
+    #                "Fixed delays provided are large"
+
+    fixed_delays_all = pd.read_csv("./delays.txt", sep=" ", index_col=None)
 
 
-    # just use LO c for now
-    rfsoc_tab = snap_config.ATA_SNAP_TAB[snap_config.ATA_SNAP_TAB.LO == "c"]
+    # just use LO b for now
+    rfsoc_tab = snap_config.ATA_SNAP_TAB[snap_config.ATA_SNAP_TAB.LO == "b"]
     rfsoc_hostnames = []
+    fixed_delays = []
 
     # retrieve names of rfsocs
     for ant in np.char.lower(np.array(ANTNAMES)):
         if ant not in list(rfsoc_tab.ANT_name):
             raise RuntimeError("Antenna %s not in the rfsoc configuration!" %ant)
+        if ant not in list(fixed_delays_all.values[:,0]):
+            raise RuntimeError("Antenna %s not in the fixed delays list!" %ant)
         rfsoc_hostnames.append(
                 rfsoc_tab[rfsoc_tab.ANT_name == ant].snap_hostname.values[0])
+        fixed_delays.append(
+                fixed_delays_all[fixed_delays_all.values[:,0] == ant].values[:,1][0])
+
+    fixed_delays = np.array(fixed_delays)*1e-9
+
 
     # initialise the rfsoc feng objects
     rfsocs = snap_control.init_snaps(rfsoc_hostnames)
@@ -129,6 +139,9 @@ def main():
 
         # Compute the delay rate in s/s
         rate = (delay2 - delay1) / (tts[-1] - tts[0])
+        
+        print(ANTNAMES)
+        print("")
 
         # Print values to screen, for now
         print("Delay [ns]")
