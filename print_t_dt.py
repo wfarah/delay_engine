@@ -112,6 +112,10 @@ def main():
         # Compute the delay rate in s/s
         rate = (delay2 - delay1) / (tts[-1] - tts[0])
 
+        print("Antnames")
+        print(ANTNAMES)
+        print("")
+
         # Print values to screen, for now
         print("Delay [ns]")
         print(delay1*1e9)
