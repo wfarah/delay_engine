@@ -19,6 +19,7 @@ ANTNAMES = ['1C', '1K', '1H', '1E', '1G',
         
 WD = os.path.realpath(os.path.dirname(__file__))
 DEFAULT_ANT_ITRF = os.path.join(WD, "ant_itrf.txt")
+DEFAULT_DELAYS = os.path.join(WD, "delays.txt")
 DEFAULT_REF_ANT = "1C" #1c is a performant antenna
 MAX_SAMP_DELAY = 16384
 CLOCK_FREQ = 2.048e9 #Gsps
@@ -42,28 +43,19 @@ def main():
     parser.add_argument('-itrf', type=str,
         default = DEFAULT_ANT_ITRF, required = False,
         help = 'ITRF file [default: %s]' %DEFAULT_ANT_ITRF)
-    parser.add_argument('-fixed', required = False, nargs='+',
-        help = 'Fixed delays [sec], should match number of ants')
+    parser.add_argument('-fixed', required = False, type=str,
+        default = DEFAULT_DELAYS,
+        help = 'Delay file to use [default: %s]' %DEFAULT_DELAYS)
     parser.add_argument('-noadvance', action='store_true', default=False,
         help = 'Do not advance the delay engine by the fixed term')
+    parser.add_argument('-zero', action='store_true', default=False,
+        help = 'Simply apply zero delay/phase, ignore everything')
 
     # Parse cmd line arguments
     args = parser.parse_args()
 
-    # Add fixed delays
-    #if not args.fixed:
-    #    fixed_delays = np.zeros_like(ANTNAMES, dtype=np.float32)
-    #else:
-    #    if len(args.fixed) == 1:
-    #        fixed_delays = np.array([args.fixed[0]]*len(ANTNAMES), dtype=np.float)
-    #    else:
-    #        fixed_delays = np.array(args.fixed, dtype=np.float)
-    #        assert len(fixed_delays) == len(ANTNAMES),\
-    #                "Make sure fixed delays match number of antennas"
-    #        assert max(fixed_delays) < MAX_DELAY,\
-    #                "Fixed delays provided are large"
 
-    fixed_delays_all = pd.read_csv("./delays.txt", sep=" ", index_col=None)
+    fixed_delays_all = pd.read_csv(args.fixed, sep=" ", index_col=None)
 
 
     # just use LO b for now
@@ -123,8 +115,8 @@ def main():
         delay1 = fixed_delays + (w1/const.c.value)
         delay2 = fixed_delays + (w2/const.c.value)
 
-        delay1 = -delay1
-        delay2 = -delay2
+        #delay1 = delay1
+        #delay2 = delay2
 
         # advance all the B-engines forward in time
         if not args.noadvance:
@@ -163,6 +155,13 @@ def main():
         print(phase_rate)
 
         print("="*79)
+
+        if args.zero:
+            print("Zeroing all delays/phase")
+            delay1 = np.zeros_like(delay1)
+            rate = np.zeros_like(rate)
+            phase = np.zeros_like(phase)
+            phase_rate = np.zeros_like(phase_rate)
 
         for i,rfsoc in enumerate(rfsocs):
             rfsoc.set_delay_tracking(
