@@ -28,6 +28,8 @@ ADC_SAMP_TIME = 1/CLOCK_FREQ
 MAX_DELAY = MAX_SAMP_DELAY * ADC_SAMP_TIME #seconds
 ADVANCE_TIME = MAX_DELAY/2
 
+BANDWIDTH = CLOCK_FREQ/2. #Hz
+
 
 def main():
     parser = argparse.ArgumentParser(description='print w coordinate')
@@ -143,8 +145,9 @@ def main():
         print("Delay rate [ns/s]")
         print(rate*1e9)
 
-        phase      = -2 * np.pi * args.lo*1e6 * delay1
-        phase_rate = -2 * np.pi * args.lo*1e6 * rate
+        # Using LO - BW/2 for fringe rate
+        phase      = -2 * np.pi * (args.lo*1e6 - BANDWIDTH/2.) * delay1
+        phase_rate = -2 * np.pi * (args.lo*1e6 - BANDWIDTH/2.) * rate
 
         print("")
         print("Phase [rad]")
@@ -169,7 +172,8 @@ def main():
                     [rate[i]*1e9,       rate[i]*1e9],
                     [phase[i],      phase[i]],
                     [phase_rate[i], phase_rate[i]],
-                    load_time = int(ts[0].unix)
+                    load_time = int(ts[0].unix),
+                    invert_band=True
                     )
 
         time.sleep(10)
