@@ -65,7 +65,8 @@ def main():
     # just use LO b for now
     rfsoc_tab = snap_config.ATA_SNAP_TAB[snap_config.ATA_SNAP_TAB.LO == "b"]
     rfsoc_hostnames = []
-    fixed_delays = []
+    fixed_delays_x = []
+    fixed_delays_y = []
 
     # retrieve names of rfsocs
     for ant in np.char.lower(np.array(ANTNAMES)):
@@ -75,10 +76,13 @@ def main():
             raise RuntimeError("Antenna %s not in the fixed delays list!" %ant)
         rfsoc_hostnames.append(
                 rfsoc_tab[rfsoc_tab.ANT_name == ant].snap_hostname.values[0])
-        fixed_delays.append(
+        fixed_delays_x.append(
                 fixed_delays_all[fixed_delays_all.values[:,0] == ant].values[:,1][0])
+        fixed_delays_y.append(
+                fixed_delays_all[fixed_delays_all.values[:,0] == ant].values[:,2][0])
 
-    fixed_delays = np.array(fixed_delays)*1e-9
+    fixed_delays_x = np.array(fixed_delays_x)*1e-9
+    fixed_delays_y = np.array(fixed_delays_y)*1e-9
 
 
     # initialise the rfsoc feng objects
@@ -120,69 +124,86 @@ def main():
         w2 = uvw2[...,2]
 
         # Add fixed delays + convert to seconds
-        delay1 = fixed_delays + (w1/const.c.value)
-        delay2 = fixed_delays + (w2/const.c.value)
+        delay1_x = fixed_delays_x + (w1/const.c.value)
+        delay2_x = fixed_delays_x + (w2/const.c.value)
+        delay1_y = fixed_delays_y + (w1/const.c.value)
+        delay2_y = fixed_delays_y + (w2/const.c.value)
 
-        #delay1 = delay1
-        #delay2 = delay2
 
         # advance all the B-engines forward in time
         if not args.noadvance:
-            delay1 += ADVANCE_TIME
-            delay2 += ADVANCE_TIME
+            delay1_x += ADVANCE_TIME
+            delay2_x += ADVANCE_TIME
+            delay1_y += ADVANCE_TIME
+            delay2_y += ADVANCE_TIME
 
         # make sure we're not providing large delays
-        assert np.all((delay1 < MAX_DELAY) & (delay1 > 0)),\
+        assert np.all((delay1_x < MAX_DELAY) & (delay1_x > 0)),\
                 "Delays are not within 0 and max_delay: %.2e" %MAX_DELAY
-        assert np.all((delay2 < MAX_DELAY) & (delay2 > 0)),\
+        assert np.all((delay2_x < MAX_DELAY) & (delay2_x > 0)),\
+                "Delays are not within 0 and max_delay: %.2e" %MAX_DELAY
+        assert np.all((delay1_y < MAX_DELAY) & (delay1_y > 0)),\
+                "Delays are not within 0 and max_delay: %.2e" %MAX_DELAY
+        assert np.all((delay2_y < MAX_DELAY) & (delay2_y > 0)),\
                 "Delays are not within 0 and max_delay: %.2e" %MAX_DELAY
 
         # Compute the delay rate in s/s
-        rate = (delay2 - delay1) / (tts[-1] - tts[0])
+        rate_x = (delay2_x - delay1_x) / (tts[-1] - tts[0])
+        rate_y = (delay2_y - delay1_y) / (tts[-1] - tts[0])
         
         print(ANTNAMES)
         print("")
 
         # Print values to screen, for now
         print("Delay [ns]")
-        print(delay1*1e9)
-        #print(delay2*1e9)
+        print(delay1_x*1e9)
+        print(delay1_y*1e9)
         print("")
         print("Delay rate [ns/s]")
-        print(rate*1e9)
+        print(rate_x*1e9)
+        print(rate_y*1e9)
 
         # Using LO - BW/2 for fringe rate
-        phase      = -2 * np.pi * (args.lo*1e6 - BANDWIDTH/2.) * delay1
-        phase_rate = -2 * np.pi * (args.lo*1e6 - BANDWIDTH/2.) * rate
+        phase_x      = -2 * np.pi * (args.lo*1e6 - BANDWIDTH/2.) * delay1_x
+        phase_rate_x = -2 * np.pi * (args.lo*1e6 - BANDWIDTH/2.) * rate_x
+        phase_y      = -2 * np.pi * (args.lo*1e6 - BANDWIDTH/2.) * delay1_y
+        phase_rate_y = -2 * np.pi * (args.lo*1e6 - BANDWIDTH/2.) * rate_y
 
         print("")
         print("Phase [rad]")
-        print(phase)
+        print(phase_x)
+        print(phase_y)
 
         print("")
         print("Phase rate [rad/s]")
-        print(phase_rate)
+        print(phase_rate_x)
+        print(phase_rate_y)
 
         print("="*79)
 
         if args.zero:
             print("Zeroing all delays/phase")
-            delay1 = np.zeros_like(delay1)
-            rate = np.zeros_like(rate)
-            phase = np.zeros_like(phase)
-            phase_rate = np.zeros_like(phase_rate)
+            delay1_x = np.zeros_like(delay1_x)
+            rate_x = np.zeros_like(rate_x)
+            phase_x = np.zeros_like(phase_x)
+            phase_rate_x = np.zeros_like(phase_rate_x)
+            delay1_y = np.zeros_like(delay1_y)
+            rate_y = np.zeros_like(rate_y)
+            phase_y = np.zeros_like(phase_y)
+            phase_rate_y = np.zeros_like(phase_rate_y)
 
         for i,rfsoc in enumerate(rfsocs):
             rfsoc.set_delay_tracking(
-                    [delay1[i]*1e9,     delay1[i]*1e9], 
-                    [rate[i]*1e9,       rate[i]*1e9],
-                    [phase[i],      phase[i]],
-                    [phase_rate[i], phase_rate[i]],
+                    [delay1_x[i]*1e9,     delay1_y[i]*1e9], 
+                    [rate_x[i]*1e9,       rate_y[i]*1e9],
+                    [phase_x[i],      phase_y[i]],
+                    [phase_rate_x[i], phase_rate_y[i]],
                     load_time = int(ts[0].unix),
                     invert_band=True
                     )
             log.write("%s %i %.6f %.6f %.6f %.6f\n" \
-                    %(rfsoc.host, int(ts[0].unix),delay1[i]*1e9, rate[i]*1e9, phase[i], phase_rate[i]))
+                    %(rfsoc.host, int(ts[0].unix),
+                        delay1_x[i]*1e9, rate_x[i]*1e9, phase_x[i], phase_rate_x[i]))
 
         time.sleep(10)
 
