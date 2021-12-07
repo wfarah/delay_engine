@@ -199,7 +199,7 @@ def main():
                     [phase_x[i],      phase_y[i]],
                     [phase_rate_x[i], phase_rate_y[i]],
                     load_time = int(ts[0].unix),
-                    invert_band=True
+                    invert_band=False
                     )
             log.write("%s %i %.6f %.6f %.6f %.6f\n" \
                     %(rfsoc.host, int(ts[0].unix),
