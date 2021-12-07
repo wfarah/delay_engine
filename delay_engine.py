@@ -11,6 +11,8 @@ import argparse
 
 from SNAPobs import snap_control, snap_config
 
+import atexit
+
 
 ANTNAMES = ['1C', '1K', '1H', '1E', '1G', 
         '2A', '2B', '2C', '2H', '2E', '2J', '2K', '2L', '2M',
@@ -98,6 +100,10 @@ def main():
     dec = args.source_dec
     source = SkyCoord(ra, dec, unit='deg')
 
+    log = open("delay_engine.log", "a")
+    log.write("rfsoc_engine unix delay delay_rate phase phase_rate\n")
+    atexit.register(log.close)
+
     while True:
         t = np.floor(time.time())
         tts = [3, 20+3] # Interpolate between t=3 sec and t=20 sec
@@ -175,6 +181,8 @@ def main():
                     load_time = int(ts[0].unix),
                     invert_band=True
                     )
+            log.write("%s %i %.6f %.6f %.6f %.6f\n" \
+                    %(rfsoc.host, int(ts[0].unix),delay1[i]*1e9, rate[i]*1e9, phase[i], phase_rate[i]))
 
         time.sleep(10)
 
