@@ -70,71 +70,72 @@ def do_npoint_spec(arr, nfft):
 assert NFFT in [1,4], "Only 4-point FFT is supported"
 assert NTIMES % NFFT == 0, "NFFT must divide NTIMES"
 
-iref_ant = 5 # this is the reference antenna ID that everything is multiplied against
+iref_ant = 0 # this is the reference antenna ID that everything is multiplied against
 assert iref_ant < NANTS, "reference antenna must be included in the antennas"
 
 # file name. Note we will have more than 1 file per obs
 assert len(sys.argv) > 2
-fname = sys.argv[1]
+fnames = sys.argv[1:-1]
 #outname = "out_fast_ga_final.vis"
 outname = sys.argv[-1]
 
-# "Load" the guppi file
-# This initialises an internal ring buffer to load data in
-g = guppi.Guppi(fname)
+nfiles = len(fnames)
 
 # These are the "visibilities"
 # i.e. the cross-multiplication data products
-vis = np.zeros((NBLOCKS, NANTS, NCHANS*NFFT, NPOLS*NPOLS), dtype=np.complex64)
+vis = np.zeros((NBLOCKS*nfiles, NANTS, NCHANS*NFFT, NPOLS*NPOLS), dtype=np.complex64)
 
 # Now we're done, write data to disk
 atexit.register(vis.tofile,outname)
 
+for fname in fnames:
+    # "Load" the guppi file
+    # This initialises an internal ring buffer to load data in
+    g = guppi.Guppi(fname)
 
+    for iblock in range(NBLOCKS):
+        hdr, data = g.read_next_block() # read next hdr+data block
+        # data have shape of: (NANTS, NCHANS, NTIMES, NPOLS)
+        # TODO: assert data.shape == (NANTS, NCHANS, NTIMES, NPOLS)
 
-for iblock in range(NBLOCKS):
-    hdr, data = g.read_next_block() # read next hdr+data block
-    # data have shape of: (NANTS, NCHANS, NTIMES, NPOLS)
-    # TODO: assert data.shape == (NANTS, NCHANS, NTIMES, NPOLS)
+        ant_ref = data[iref_ant] # this is the reference antenna
 
-    ant_ref = data[iref_ant] # this is the reference antenna
+        for iant in range(NANTS):
+            print(iant)
+            ant = data[iant] # current antenna we need to correlate with reference
+            # ant have shape of (NCHANS, NTIMES, NPOLS)
+            # note if iant == iref_ant, we end up with zero phase
 
-    for iant in range(NANTS):
-        print(iant)
-        ant = data[iant] # current antenna we need to correlate with reference
-        # ant have shape of (NCHANS, NTIMES, NPOLS)
-        # note if iant == iref_ant, we end up with zero phase
+            for ichan in range(NCHANS):
+                ch_ant    = ant[ichan]
+                ch_refant = ant_ref[ichan]
 
-        for ichan in range(NCHANS):
-            ch_ant    = ant[ichan]
-            ch_refant = ant_ref[ichan]
+                ch_ant_fftd_x    = do_npoint_spec(ch_ant[:,0], NFFT)
+                ch_ant_fftd_y    = do_npoint_spec(ch_ant[:,1], NFFT)
+                ch_refant_fftd_x = do_npoint_spec(ch_refant[:,0], NFFT)
+                ch_refant_fftd_y = do_npoint_spec(ch_refant[:,1], NFFT)
+                # all the above will have shape = (NTIME//NFFT, NFFT)
 
-            ch_ant_fftd_x    = do_npoint_spec(ch_ant[:,0], NFFT)
-            ch_ant_fftd_y    = do_npoint_spec(ch_ant[:,1], NFFT)
-            ch_refant_fftd_x = do_npoint_spec(ch_refant[:,0], NFFT)
-            ch_refant_fftd_y = do_npoint_spec(ch_refant[:,1], NFFT)
-            # all the above will have shape = (NTIME//NFFT, NFFT)
+                for ifft in range(NFFT):
+                    # note that np.vdot(a, b) = np.dot(np.conj(a), b)
+                    #                         = np.sum(np.conj(a) * b)
 
-            for ifft in range(NFFT):
-                # note that np.vdot(a, b) = np.dot(np.conj(a), b)
-                #                         = np.sum(np.conj(a) * b)
+                    # Here we are summing over every block. We will not subdivide each block
+                    # which is fine, because each block is ~16 ms
 
-                # Here we are summing over every block. We will not subdivide each block
-                # which is fine, because each block is ~16 ms
+                    # XX
+                    vis[iblock, iant, ichan*NFFT+ifft, 0] =\
+                        np.vdot(ch_ant_fftd_x[:,ifft], ch_refant_fftd_x[:,ifft])
 
-                # XX
-                vis[iblock, iant, ichan*NFFT+ifft, 0] =\
-                    np.vdot(ch_ant_fftd_x[:,ifft], ch_refant_fftd_x[:,ifft])
+                    # YY
+                    vis[iblock, iant, ichan*NFFT+ifft, 1] =\
+                       np.vdot(ch_ant_fftd_y[:,ifft], ch_refant_fftd_y[:,ifft])
 
-                # YY
-                vis[iblock, iant, ichan*NFFT+ifft, 1] =\
-                   np.vdot(ch_ant_fftd_y[:,ifft], ch_refant_fftd_y[:,ifft])
+                    # XY
+                    vis[iblock, iant, ichan*NFFT+ifft, 2] =\
+                       np.vdot(ch_ant_fftd_x[:,ifft], ch_refant_fftd_y[:,ifft])
 
-                # XY
-                vis[iblock, iant, ichan*NFFT+ifft, 2] =\
-                   np.vdot(ch_ant_fftd_x[:,ifft], ch_refant_fftd_y[:,ifft])
-
-                # YX
-                vis[iblock, iant, ichan*NFFT+ifft, 3] =\
-                    np.vdot(ch_ant_fftd_y[:,ifft], ch_refant_fftd_x[:,ifft])
+                    # YX
+                    vis[iblock, iant, ichan*NFFT+ifft, 3] =\
+                        np.vdot(ch_ant_fftd_y[:,ifft], ch_refant_fftd_x[:,ifft])
 
