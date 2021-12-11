@@ -22,6 +22,7 @@ ANTNAMES = ['1C', '1K', '1H', '1E', '1G',
 WD = os.path.realpath(os.path.dirname(__file__))
 DEFAULT_ANT_ITRF = os.path.join(WD, "ant_itrf.txt")
 DEFAULT_DELAYS = os.path.join(WD, "delays.txt")
+DEFAULT_PHASES = os.path.join(WD, "phases.txt")
 DEFAULT_REF_ANT = "1C" #1c is a performant antenna
 MAX_SAMP_DELAY = 16384
 CLOCK_FREQ = 2.048e9 #Gsps
@@ -50,8 +51,14 @@ def main():
     parser.add_argument('-fixed', required = False, type=str,
         default = DEFAULT_DELAYS,
         help = 'Delay file to use [default: %s]' %DEFAULT_DELAYS)
+    parser.add_argument('-phases', required = False, type=str,
+        default = DEFAULT_PHASES,
+        help = 'Frequency-dependent phases file to use [default: %s]'\
+            %DEFAULT_PHASES)
     parser.add_argument('-noadvance', action='store_true', default=False,
         help = 'Do not advance the delay engine by the fixed term')
+    parser.add_argument('-nophase', action='store_true', default=False,
+        help = 'Do not apply phase solution')
     parser.add_argument('-zero', action='store_true', default=False,
         help = 'Simply apply zero delay/phase, ignore everything')
 
@@ -60,6 +67,7 @@ def main():
 
 
     fixed_delays_all = pd.read_csv(args.fixed, sep=" ", index_col=None)
+    phases_all = pd.read_csv(args.phases, sep=" ", index_col=False)
 
 
     # just use LO b for now
@@ -67,6 +75,9 @@ def main():
     rfsoc_hostnames = []
     fixed_delays_x = []
     fixed_delays_y = []
+
+    phases_x = []
+    phases_y = []
 
     # retrieve names of rfsocs
     for ant in np.char.lower(np.array(ANTNAMES)):
@@ -81,6 +92,9 @@ def main():
         fixed_delays_y.append(
                 fixed_delays_all[fixed_delays_all.values[:,0] == ant].values[:,2][0])
 
+        phases_x.append(phases_all[ant+"x"])
+        phases_y.append(phases_all[ant+"y"])
+
     fixed_delays_x = np.array(fixed_delays_x)*1e-9
     fixed_delays_y = np.array(fixed_delays_y)*1e-9
 
@@ -89,6 +103,11 @@ def main():
     rfsocs = snap_control.init_snaps(rfsoc_hostnames)
     for rfsoc in rfsocs:
         rfsoc.fpga.get_system_information(snap_config.ATA_CFG['RFSOCFPG'])
+
+    if not args.nophase:
+        for rfsoc, phase_calx, phase_caly in zip(rfsocs, phases_x, phases_y):
+            rfsoc.set_phase_calibration(0, phase_calx)
+            rfsoc.set_phase_calibration(1, phase_caly)
 
 
     # Get ITRF coordinates of the antennas
