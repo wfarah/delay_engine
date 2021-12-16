@@ -106,8 +106,8 @@ def main():
 
     if not args.nophase:
         for rfsoc, phase_calx, phase_caly in zip(rfsocs, phases_x, phases_y):
-            rfsoc.set_phase_calibration(0, phase_calx)
-            rfsoc.set_phase_calibration(1, phase_caly)
+            rfsoc.set_phase_calibration(0, -phase_calx)
+            rfsoc.set_phase_calibration(1, -phase_caly)
 
 
     # Get ITRF coordinates of the antennas
