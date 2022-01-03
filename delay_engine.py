@@ -18,6 +18,7 @@ ANTNAMES = ['1C', '1K', '1H', '1E', '1G',
         '2A', '2B', '2C', '2H', '2E', '2J', '2K', '2L', '2M',
         '3C', '3D', '3L', 
         '4G', '4J', '5B']
+ALL_LO = ["a", "b", "c", "d"]
         
 WD = os.path.realpath(os.path.dirname(__file__))
 DEFAULT_ANT_ITRF = os.path.join(WD, "ant_itrf.txt")
@@ -35,12 +36,15 @@ BANDWIDTH = CLOCK_FREQ/2. #Hz
 
 
 def main():
-    parser = argparse.ArgumentParser(description='print w coordinate')
+    parser = argparse.ArgumentParser(
+        description = 'Control and apply delay engine on RFSoC-boards')
     parser.add_argument('-source_ra', type=float, required=True, 
         help = 'Source RA [decimal hours]')
     parser.add_argument('-source_dec', type=float, required=True,
         help = 'Source Dec [degrees]')
-    parser.add_argument('-lo', type=float, required=True,
+    parser.add_argument('-lo', type=str, required=True,
+        help = 'LO letter [a, b, c, d]')
+    parser.add_argument('-lofreq', type=float, required=True,
         help = 'LO frequency [MHz]')
     parser.add_argument('-refant', type=str,
         default = DEFAULT_REF_ANT,
@@ -65,13 +69,17 @@ def main():
     # Parse cmd line arguments
     args = parser.parse_args()
 
+    assert args.lo in ALL_LO,\
+            "Input correct LO letter (input: %s)" %args.lo
+
 
     fixed_delays_all = pd.read_csv(args.fixed, sep=" ", index_col=None)
     phases_all = pd.read_csv(args.phases, sep=" ", index_col=False)
 
 
-    # just use LO b for now
-    rfsoc_tab = snap_config.ATA_SNAP_TAB[snap_config.ATA_SNAP_TAB.LO == "b"]
+    # Select LO
+    rfsoc_tab = snap_config.ATA_SNAP_TAB[
+            snap_config.ATA_SNAP_TAB.LO == args.lo]
     rfsoc_hostnames = []
     fixed_delays_x = []
     fixed_delays_y = []
@@ -79,7 +87,7 @@ def main():
     phases_x = []
     phases_y = []
 
-    # retrieve names of rfsocs
+    # retrieve names of rfsoc instances
     for ant in np.char.lower(np.array(ANTNAMES)):
         if ant not in list(rfsoc_tab.ANT_name):
             raise RuntimeError("Antenna %s not in the rfsoc configuration!" %ant)
@@ -126,6 +134,8 @@ def main():
     log = open("delay_engine.log", "a")
     log.write("rfsoc_engine unix delay delay_rate phase phase_rate\n")
     atexit.register(log.close)
+
+    lo_freq = args.lofreq
 
     while True:
         t = np.floor(time.time())
@@ -183,10 +193,10 @@ def main():
         print(rate_y*1e9)
 
         # Using LO - BW/2 for fringe rate
-        phase_x      = -2 * np.pi * (args.lo*1e6 - BANDWIDTH/2.) * delay1_x
-        phase_rate_x = -2 * np.pi * (args.lo*1e6 - BANDWIDTH/2.) * rate_x
-        phase_y      = -2 * np.pi * (args.lo*1e6 - BANDWIDTH/2.) * delay1_y
-        phase_rate_y = -2 * np.pi * (args.lo*1e6 - BANDWIDTH/2.) * rate_y
+        phase_x      = -2 * np.pi * (lo_freq*1e6 - BANDWIDTH/2.) * delay1_x
+        phase_rate_x = -2 * np.pi * (lo_freq*1e6 - BANDWIDTH/2.) * rate_x
+        phase_y      = -2 * np.pi * (lo_freq*1e6 - BANDWIDTH/2.) * delay1_y
+        phase_rate_y = -2 * np.pi * (lo_freq*1e6 - BANDWIDTH/2.) * rate_y
 
         print("")
         print("Phase [rad]")
