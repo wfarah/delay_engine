@@ -6,7 +6,8 @@
 #
 
 from astropy.time import Time, TimeDelta
-from astropy.coordinates import SkyCoord, AltAz, ICRS, ITRS
+from astropy.coordinates import SkyCoord, AltAz, ICRS, ITRS,\
+        CartesianRepresentation
 import astropy.units as u
 import astropy.constants as const
 import numpy as np
@@ -49,6 +50,56 @@ def compute_uvw(ts, source, ant_coordinates, ref_coordinates):
 
     return uvw
 
+
+def compute_uvw_altaz(ts, source, ant_coordinates, ref_coordinates):
+    """Computes UVW antenna coordinates with respect to reference
+       for and altaz source
+
+    Args:
+        ts: Time to compute the coordinates
+        source: source SkyCoord
+        ant_coordinates: antenna ECEF coordinates.
+             This is indexed as (antenna_number, xyz)
+        ref_coordinates: phasing reference centre coordinates.
+             This is indexed as (xyz)
+
+    Returns:
+        The UVW coordinates in metres of each of the baselines formed
+        between each of the antennas and the phasing reference. This
+        is indexed as (time, antenna_number, uvw)
+    """
+    baselines_itrs = ant_coordinates - ref_coordinates
+
+    # Calculation of vector orthogonal to line-of-sight
+    # and pointing due north.
+
+    loc = source.location
+
+    # Vector pointing to north pole
+    N = SkyCoord(ra=0*u.deg, dec=90*u.deg, location = loc,
+            obstime=ts).transform_to(ITRS(obstime=ts))
+    N = N.cartesian.xyz.value
+
+    # This is the source vector
+    V = source.transform_to(ITRS(obstime=ts)).cartesian.xyz.value
+
+    k = N - np.dot(V, N)*V
+
+    # Normalise
+    nn = np.sqrt((k**2).sum())
+    k /= nn
+
+    north_itrs = SkyCoord(ITRS(k)).cartesian
+    east_itrs = north_itrs.cross(source_itrs)
+
+    source_itrs = source.transform_to(ITRS(obstime=Time(ts))).cartesian
+
+    ww = baselines_itrs @ source_itrs.xyz.value
+    vv = baselines_itrs @ north_itrs.xyz.value
+    uu = baselines_itrs @ east_itrs.xyz.value
+    uvw = np.stack((uu.T, vv.T, ww.T), axis=-1)
+
+    return uvw
 
 def compute_antenna_gainphase(uvw, delays, freq, n_ch, ch_bw, const_phase):
     """Computes the gain phase correction for each antenna
