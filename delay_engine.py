@@ -221,6 +221,15 @@ def main():
             phase_y = np.zeros_like(phase_y)
             phase_rate_y = np.zeros_like(phase_rate_y)
 
+
+        # In case we didn't make it in time before
+        # the requested delay time, start a new
+        # iteration as quickly as possible
+        if time.time() > (ts[0].unix - 0.5):
+            print("WARNING: the delay time requested [%.2f] was in the"\
+                    "past of this: %.2f" %(ts[0].unix, time.time()))
+            continue
+
         for i,rfsoc in enumerate(rfsocs):
             rfsoc.set_delay_tracking(
                     [delay1_x[i]*1e9,     delay1_y[i]*1e9], 
