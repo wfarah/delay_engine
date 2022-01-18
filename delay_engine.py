@@ -48,7 +48,7 @@ def main():
         help = 'LO frequency [MHz]')
     parser.add_argument('-refant', type=str,
         default = DEFAULT_REF_ANT,
-        help = 'Reference antenna')
+        help = 'Reference antenna [%s]' %DEFAULT_REF_ANT)
     parser.add_argument('-itrf', type=str,
         default = DEFAULT_ANT_ITRF, required = False,
         help = 'ITRF file [default: %s]' %DEFAULT_ANT_ITRF)
