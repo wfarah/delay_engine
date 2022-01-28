@@ -10,6 +10,7 @@ import time, os
 import argparse
 
 from SNAPobs import snap_control, snap_config
+from ATATools import ata_control
 
 import atexit
 
@@ -50,8 +51,8 @@ def main():
 
     parser.add_argument('-lo', type=str, required=True,
         help = 'LO letter [a, b, c, d]')
-    parser.add_argument('-lofreq', type=float, required=True,
-        help = 'LO frequency [MHz]')
+    #parser.add_argument('-lofreq', type=float, required=True,
+    #    help = 'LO frequency [MHz]')
     parser.add_argument('-refant', type=str,
         default = DEFAULT_REF_ANT,
         help = 'Reference antenna [%s]' %DEFAULT_REF_ANT)
@@ -83,12 +84,16 @@ def main():
     phases_all = pd.read_csv(args.phases, sep=" ", index_col=False)
 
     source_type = None
+    # We provided RA/Dec
     if args.source_ra and args.source_dec:
         source_type = "radec"
+    # We provided alt/az
     elif args.source_alt and args.source_az:
         source_type = "altaz"
+    # We didn't provide anything, use whatever the reference antenna is
+    # pointing at
     else:
-        raise RuntimeError("Input either a pair of radec or altaz coordinates")
+        source_type = "radec_auto"
 
 
     # Select LO
@@ -156,9 +161,12 @@ def main():
     log.write("rfsoc_engine unix delay delay_rate phase phase_rate\n")
     atexit.register(log.close)
 
-    lo_freq = args.lofreq
+    #lo_freq = args.lofreq
 
     while True:
+        # Parse the LO frequency automatically from the ata_control
+        lo_freq = ata_control.get_sky_freq(args.lo)
+
         t = np.floor(time.time())
         tts = [3, 20+3] # Interpolate between t=3 sec and t=20 sec
         tts = np.array(tts) + t
@@ -167,6 +175,19 @@ def main():
 
         # perform coordinate transformation to uvw
         if source_type == "radec":
+            uvw1 = compute_uvw(ts[0],  source, itrf_sub[['x','y','z']],
+                    itrf_sub[['x','y','z']].values[irefant])
+            uvw2 = compute_uvw(ts[-1], source, itrf_sub[['x','y','z']],
+                    itrf_sub[['x','y','z']].values[irefant])
+
+        if source_type == "radec_auto":
+            # These are a bit off because we are using ra/dec values that have been
+            # refraction corrected. Offsets are pretty small (sub-arcsecond), so
+            # not too major for the ATA
+            ra,dec = ata_control.get_ra_dec([refant.lower()])[refant.lower()]
+            ra = args.source_ra * 360 / 24.
+            dec = args.source_dec
+            source = SkyCoord(ra, dec, unit='deg')
             uvw1 = compute_uvw(ts[0],  source, itrf_sub[['x','y','z']],
                     itrf_sub[['x','y','z']].values[irefant])
             uvw2 = compute_uvw(ts[-1], source, itrf_sub[['x','y','z']],
