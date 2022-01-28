@@ -38,10 +38,16 @@ BANDWIDTH = CLOCK_FREQ/2. #Hz
 def main():
     parser = argparse.ArgumentParser(
         description = 'Control and apply delay engine on RFSoC-boards')
-    parser.add_argument('-source_ra', type=float, required=True, 
+    parser.add_argument('-source_ra', type=float,
         help = 'Source RA [decimal hours]')
-    parser.add_argument('-source_dec', type=float, required=True,
+    parser.add_argument('-source_dec', type=float,
         help = 'Source Dec [degrees]')
+
+    parser.add_argument('-source_alt', type=float,
+        help = 'Source altitude [degrees]')
+    parser.add_argument('-source_az', type=float,
+        help = 'Source azimuth [degrees]')
+
     parser.add_argument('-lo', type=str, required=True,
         help = 'LO letter [a, b, c, d]')
     parser.add_argument('-lofreq', type=float, required=True,
@@ -75,6 +81,14 @@ def main():
 
     fixed_delays_all = pd.read_csv(args.fixed, sep=" ", index_col=None)
     phases_all = pd.read_csv(args.phases, sep=" ", index_col=False)
+
+    source_type = None
+    if args.source_ra and args.source_dec:
+        source_type = "radec"
+    elif args.source_alt and args.source_az:
+        source_type = "altaz"
+    else:
+        raise RuntimeError("Input either a pair of radec or altaz coordinates")
 
 
     # Select LO
@@ -126,10 +140,17 @@ def main():
     refant = args.refant.upper()
     irefant = itrf_sub.index.values.tolist().index(refant)
 
+    # Define telescope location
+    ata = EarthLocation(lat= "40:49:03.0", lon= "-121:28:24.0", height= 1008)
+
     # Parse phase center coordinates
-    ra = args.source_ra * 360 / 24.
-    dec = args.source_dec
-    source = SkyCoord(ra, dec, unit='deg')
+    if source_type == "radec":
+        ra = args.source_ra * 360 / 24.
+        dec = args.source_dec
+        source = SkyCoord(ra, dec, unit='deg')
+    elif source_type == "altaz":
+        source = AltAz(az = az*u.deg, alt = alt*u.deg, location = ata)
+
 
     log = open("delay_engine.log", "a")
     log.write("rfsoc_engine unix delay delay_rate phase phase_rate\n")
@@ -145,8 +166,23 @@ def main():
         ts = Time(tts, format='unix')
 
         # perform coordinate transformation to uvw
-        uvw1 = compute_uvw(ts[0],  source, itrf_sub[['x','y','z']], itrf_sub[['x','y','z']].values[irefant])
-        uvw2 = compute_uvw(ts[-1], source, itrf_sub[['x','y','z']], itrf_sub[['x','y','z']].values[irefant])
+        if source_type == "radec":
+            uvw1 = compute_uvw(ts[0],  source, itrf_sub[['x','y','z']],
+                    itrf_sub[['x','y','z']].values[irefant])
+            uvw2 = compute_uvw(ts[-1], source, itrf_sub[['x','y','z']],
+                    itrf_sub[['x','y','z']].values[irefant])
+
+        elif source_type == "altaz":
+            source = AltAz(az = az*u.deg, alt = alt*u.deg, location = ata,
+                    obstime = ts[0])
+            uvw1 = compute_uvw_altaz(ts[0],  source, itrf_sub[['x','y','z']],
+                    itrf_sub[['x','y','z']].values[irefant])
+
+            source = AltAz(az = az*u.deg, alt = alt*u.deg, location = ata,
+                    obstime = ts[-1])
+            uvw2 = compute_uvw_altaz(ts[-1], source, itrf_sub[['x','y','z']],
+                    itrf_sub[['x','y','z']].values[irefant])
+
 
         # "w" coordinate represents the goemetric delay in light-meters
         w1 = uvw1[...,2]
