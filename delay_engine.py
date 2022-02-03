@@ -1,9 +1,10 @@
 import numpy as np
 
-from phasing import compute_uvw, compute_antenna_gainphase
+from phasing import compute_uvw, compute_uvw_altaz
 import astropy.constants as const
 from astropy.coordinates import ITRS, SkyCoord, AltAz, EarthLocation
 from astropy.time import Time,TimeDelta
+import astropy.units as u
 import pandas as pd
 import time, os
 
@@ -154,6 +155,8 @@ def main():
         dec = args.source_dec
         source = SkyCoord(ra, dec, unit='deg')
     elif source_type == "altaz":
+        az = args.source_az
+        alt = args.source_alt
         source = AltAz(az = az*u.deg, alt = alt*u.deg, location = ata)
 
 
@@ -185,8 +188,7 @@ def main():
             # refraction corrected. Offsets are pretty small (sub-arcsecond), so
             # not too major for the ATA
             ra,dec = ata_control.get_ra_dec([refant.lower()])[refant.lower()]
-            ra = args.source_ra * 360 / 24.
-            dec = args.source_dec
+            ra *= 360 / 24.
             source = SkyCoord(ra, dec, unit='deg')
             uvw1 = compute_uvw(ts[0],  source, itrf_sub[['x','y','z']],
                     itrf_sub[['x','y','z']].values[irefant])

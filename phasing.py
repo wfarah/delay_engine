@@ -89,10 +89,9 @@ def compute_uvw_altaz(ts, source, ant_coordinates, ref_coordinates):
     nn = np.sqrt((k**2).sum())
     k /= nn
 
+    source_itrs = source.transform_to(ITRS(obstime=Time(ts))).cartesian
     north_itrs = SkyCoord(ITRS(k)).cartesian
     east_itrs = north_itrs.cross(source_itrs)
-
-    source_itrs = source.transform_to(ITRS(obstime=Time(ts))).cartesian
 
     ww = baselines_itrs @ source_itrs.xyz.value
     vv = baselines_itrs @ north_itrs.xyz.value
