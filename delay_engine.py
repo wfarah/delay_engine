@@ -1,4 +1,5 @@
 import numpy as np
+import toml
 
 from phasing import compute_uvw, compute_uvw_altaz
 import astropy.constants as const
@@ -35,6 +36,28 @@ MAX_DELAY = MAX_SAMP_DELAY * ADC_SAMP_TIME #seconds
 ADVANCE_TIME = MAX_DELAY/2
 
 BANDWIDTH = CLOCK_FREQ/2. #Hz
+
+
+def parse_toml(toml_dict):
+    """
+    Parse a toml file as a pandas dataframe
+    with columns of [x,y,z]
+    """
+    df = pd.DataFrame()
+    df = df.from_dict(toml_dict['antennas'])[['name','position']]
+    df.index = np.char.upper(list(df['name']))
+    df = df.drop(columns=['name'])
+
+    pos = np.array([i for i in df['position'].values])
+    df = df.drop(columns=['position'])
+    df['x'] = pos[:,0]
+    df['y'] = pos[:,1]
+    df['z'] = pos[:,2]
+    return df
+
+def parse_yaml(yaml_fname):
+    raise NotImplementedError("yaml parsing not implemented yet")
+
 
 
 def main():
@@ -139,15 +162,27 @@ def main():
 
 
     # Get ITRF coordinates of the antennas
-    itrf = pd.read_csv(args.itrf, names=['x', 'y', 'z'], header=None, skiprows=1)
-    itrf_sub = itrf.loc[ANTNAMES]
+    # and define antenna positions
+    if args.itrf.endswith("toml") or args.itrf.endswith("tml"):
+        telinfo = toml.load(args.itrf)
+        itrf = parse_toml(telinfo)
+        ata = EarthLocation(lat= telinfo['latitude'],
+                lon= telinfo['longitude'], height= float(telinfo['altitude']))
+    elif args.itrf.endswith("yaml") or args.itrf.endswith("yml"):
+        telinfo = yaml.load(args.itrf)
+        itrf = parse_yaml(telinfo)
+        ata = EarthLocation(lat = telinfo['latitude'],
+                lon= telinfo['longitude'], height= float(telinfo['altitude']))
+    elif args.itrf.endswith("txt"):
+        itrf = pd.read_csv(args.itrf, names=['x', 'y', 'z'], header=None, skiprows=1)
+        # this is hardcoded for now
+        ata = EarthLocation(lat= "40:49:03.0", lon= "-121:28:24.0", height= 1008)
 
     # Select reference antenna
     refant = args.refant.upper()
+    itrf_sub = itrf.loc[ANTNAMES]
     irefant = itrf_sub.index.values.tolist().index(refant)
 
-    # Define telescope location
-    ata = EarthLocation(lat= "40:49:03.0", lon= "-121:28:24.0", height= 1008)
 
     # Parse phase center coordinates
     if source_type == "radec":
