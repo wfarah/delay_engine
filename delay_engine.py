@@ -14,6 +14,8 @@ import argparse
 from SNAPobs import snap_control, snap_config
 from ATATools import ata_control
 
+from ATATools.ata_rest import ATARestException
+
 import atexit
 
 
@@ -219,10 +221,17 @@ def main():
                     itrf_sub[['x','y','z']].values[irefant])
 
         if source_type == "radec_auto":
-            # These are a bit off because we are using ra/dec values that have been
-            # refraction corrected. Offsets are pretty small (sub-arcsecond), so
-            # not too major for the ATA
-            ra,dec = ata_control.get_ra_dec([refant.lower()])[refant.lower()]
+            source_eph = ata_control.get_eph_source([refant.lower()])[refant.lower()]
+            try:
+                # Try getting the ra dec of the source using the ephemeris file name
+                # This will fail if we are tracking a non-sidereal source
+                # or a custom RA/Dec pair
+                ra, dec = ata_control.get_source_ra_dec(source_eph)
+            except ATARestException as e:
+                # These are a bit off because we are using ra/dec values that have been
+                # refraction corrected. Offsets are pretty small (sub-arcsecond), so
+                # not too major for the ATA
+                ra, dec = ata_control.get_ra_dec([refant.lower()])[refant.lower()]
             ra *= 360 / 24.
             source = SkyCoord(ra, dec, unit='deg')
             uvw1 = compute_uvw(ts[0],  source, itrf_sub[['x','y','z']],
