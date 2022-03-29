@@ -1,6 +1,8 @@
 import numpy as np
 import toml
 
+import logging
+
 from phasing import compute_uvw, compute_uvw_altaz
 import astropy.constants as const
 from astropy.coordinates import ITRS, SkyCoord, AltAz, EarthLocation
@@ -21,7 +23,7 @@ import atexit
 
 ANTNAMES = ['1C', '1K', '1H', '1E', '1G', 
         '2A', '2B', '2C', '2H', '2E', '2J', '2K', '2L', '2M',
-        '3C', '3D', '3L', 
+        '4E', '3D', '3L',
         '4G', '4J', '5B']
 ALL_LO = ["a", "b", "c", "d"]
         
@@ -99,26 +101,43 @@ def main():
     parser.add_argument('-zero', action='store_true', default=False,
         help = 'Simply apply zero delay/phase, ignore everything')
 
+
     # Parse cmd line arguments
     args = parser.parse_args()
 
     assert args.lo in ALL_LO,\
             "Input correct LO letter (input: %s)" %args.lo
 
+    logname = 'delay_engine_%s.log' %args.lo
+    logging.basicConfig(filename=logname, filemode='a',
+            format='%(asctime)s %(levelname)s:%(message)s',
+            level=logging.INFO)
+
+    logging.info("Started delay engine")
+
+    logging.info("Using LO: %s" %args.lo)
 
     fixed_delays_all = pd.read_csv(args.fixed, sep=" ", index_col=None)
     phases_all = pd.read_csv(args.phases, sep=" ", index_col=False)
+
+    logging.info("Using file [%s] for fixed delays" %args.fixed)
+    logging.info("Using file [%s] for phase solutions" %args.phases)
 
     source_type = None
     # We provided RA/Dec
     if args.source_ra and args.source_dec:
         source_type = "radec"
+        logging.info("Using fixed (RA,Dec) = (%.6f, %.6f)"
+                %(args.source_ra, args.source_dec))
     # We provided alt/az
     elif args.source_alt and args.source_az:
         source_type = "altaz"
+        logging.info("Using fixed (alt,az) = (%.6f, %.6f)"
+                %(args.source_alt, args.source_az))
     # We didn't provide anything, use whatever the reference antenna is
     # pointing at
     else:
+        logging.info("Using automatic RA/Dec parsing from the ATA system")
         source_type = "radec_auto"
 
 
@@ -156,11 +175,14 @@ def main():
     rfsocs = snap_control.init_snaps(rfsoc_hostnames)
     for rfsoc in rfsocs:
         rfsoc.fpga.get_system_information(snap_config.ATA_CFG['RFSOCFPG'])
+        rfsoc.logger.setLevel(logging.INFO)
+    logging.info("Read FPGA files")
 
     if not args.nophase:
         for rfsoc, phase_calx, phase_caly in zip(rfsocs, phases_x, phases_y):
             rfsoc.set_phase_calibration(0, -phase_calx)
             rfsoc.set_phase_calibration(1, -phase_caly)
+    logging.info("Phase calibration solution set on RFSoCs")
 
 
     # Get ITRF coordinates of the antennas
@@ -170,6 +192,7 @@ def main():
         itrf = parse_toml(telinfo)
         ata = EarthLocation(lat= telinfo['latitude'],
                 lon= telinfo['longitude'], height= float(telinfo['altitude']))
+        logging.info("Loaded TOML file [%s]" %args.itrf)
     elif args.itrf.endswith("yaml") or args.itrf.endswith("yml"):
         telinfo = yaml.load(args.itrf)
         itrf = parse_yaml(telinfo)
@@ -197,13 +220,15 @@ def main():
         source = AltAz(az = az*u.deg, alt = alt*u.deg, location = ata)
 
 
-    log = open("delay_engine.log", "a")
-    log.write("rfsoc_engine unix delay delay_rate phase phase_rate\n")
-    atexit.register(log.close)
+    #log = open("delay_engine.log", "a")
+    #log.write("rfsoc_engine unix delay delay_rate phase phase_rate\n")
+    #log.write("")
+    #atexit.register(log.close)
 
     #lo_freq = args.lofreq
 
     while True:
+        print("New iteration")
         # Parse the LO frequency automatically from the ata_control
         lo_freq = ata_control.get_sky_freq(args.lo)
 
@@ -222,6 +247,7 @@ def main():
 
         if source_type == "radec_auto":
             source_eph = ata_control.get_eph_source([refant.lower()])[refant.lower()]
+            print("Source ephemeris: %s" %source_eph)
             try:
                 # Try getting the ra dec of the source using the ephemeris file name
                 # This will fail if we are tracking a non-sidereal source
@@ -231,9 +257,15 @@ def main():
                 # These are a bit off because we are using ra/dec values that have been
                 # refraction corrected. Offsets are pretty small (sub-arcsecond), so
                 # not too major for the ATA
+                logging.warning("Couldn't parse ra/dec from get_source_ra_dec, "\
+                        "using antenna get_ra_dec")
+                print("Couldn't Couldn't parse ra/dec from get_source_ra_dec, "\
+                        "using antenna get_ra_dec")
                 ra, dec = ata_control.get_ra_dec([refant.lower()])[refant.lower()]
             ra *= 360 / 24.
             source = SkyCoord(ra, dec, unit='deg')
+            logging.info("Obtained source name [%s] and coords (RA,Dec) = (%.6f,%.6f) "\
+                    "from backend" %(source_eph, ra, dec))
             uvw1 = compute_uvw(ts[0],  source, itrf_sub[['x','y','z']],
                     itrf_sub[['x','y','z']].values[irefant])
             uvw2 = compute_uvw(ts[-1], source, itrf_sub[['x','y','z']],
@@ -250,7 +282,7 @@ def main():
             uvw2 = compute_uvw_altaz(ts[-1], source, itrf_sub[['x','y','z']],
                     itrf_sub[['x','y','z']].values[irefant])
 
-
+        logging.info("Calculated uvw now and uvw in future")
         # "w" coordinate represents the goemetric delay in light-meters
         w1 = uvw1[...,2]
         w2 = uvw2[...,2]
@@ -283,17 +315,17 @@ def main():
         rate_x = (delay2_x - delay1_x) / (tts[-1] - tts[0])
         rate_y = (delay2_y - delay1_y) / (tts[-1] - tts[0])
         
-        print(ANTNAMES)
-        print("")
+        #print(ANTNAMES)
+        #print("")
 
         # Print values to screen, for now
-        print("Delay [ns]")
-        print(delay1_x*1e9)
-        print(delay1_y*1e9)
-        print("")
-        print("Delay rate [ns/s]")
-        print(rate_x*1e9)
-        print(rate_y*1e9)
+        #print("Delay [ns]")
+        #print(delay1_x*1e9)
+        #print(delay1_y*1e9)
+        #print("")
+        #print("Delay rate [ns/s]")
+        #print(rate_x*1e9)
+        #print(rate_y*1e9)
 
         # Using LO - BW/2 for fringe rate
         phase_x      = -2 * np.pi * (lo_freq*1e6 - BANDWIDTH/2.) * delay1_x
@@ -301,20 +333,21 @@ def main():
         phase_y      = -2 * np.pi * (lo_freq*1e6 - BANDWIDTH/2.) * delay1_y
         phase_rate_y = -2 * np.pi * (lo_freq*1e6 - BANDWIDTH/2.) * rate_y
 
-        print("")
-        print("Phase [rad]")
-        print(phase_x)
-        print(phase_y)
+        #print("")
+        #print("Phase [rad]")
+        #print(phase_x)
+        #print(phase_y)
 
-        print("")
-        print("Phase rate [rad/s]")
-        print(phase_rate_x)
-        print(phase_rate_y)
+        #print("")
+        #print("Phase rate [rad/s]")
+        #print(phase_rate_x)
+        #print(phase_rate_y)
 
-        print("="*79)
+        #print("="*79)
 
         if args.zero:
-            print("Zeroing all delays/phase")
+            logging.info("Scratch the above, we're only apply 0 delays")
+            #print("Zeroing all delays/phase")
             delay1_x = np.zeros_like(delay1_x)
             rate_x = np.zeros_like(rate_x)
             phase_x = np.zeros_like(phase_x)
@@ -329,23 +362,36 @@ def main():
         # the requested delay time, start a new
         # iteration as quickly as possible
         if time.time() > (ts[0].unix - 0.5):
-            print("WARNING: the delay time requested [%.2f] was in the"\
-                    "past of this: %.2f" %(ts[0].unix, time.time()))
+            logging.warning("The delay time requested [%.2f] was in the"\
+                    "past of this: %.2f!" %(ts[0].unix, time.time()))
             continue
 
+        retry_fast = False
         for i,rfsoc in enumerate(rfsocs):
-            rfsoc.set_delay_tracking(
-                    [delay1_x[i]*1e9,     delay1_y[i]*1e9], 
-                    [rate_x[i]*1e9,       rate_y[i]*1e9],
-                    [phase_x[i],      phase_y[i]],
-                    [phase_rate_x[i], phase_rate_y[i]],
-                    load_time = int(ts[0].unix),
-                    invert_band=False
-                    )
-            log.write("%s %i %.6f %.6f %.6f %.6f\n" \
+            try:
+                rfsoc.set_delay_tracking(
+                        [delay1_x[i]*1e9,     delay1_y[i]*1e9],
+                        [rate_x[i]*1e9,       rate_y[i]*1e9],
+                        [phase_x[i],      phase_y[i]],
+                        [phase_rate_x[i], phase_rate_y[i]],
+                        load_time = int(ts[0].unix),
+                        invert_band=False
+                        )
+            # we got an exception on one of the boards,
+            # try and set a delay asap
+            except Exception as e:
+                logging.critical("%s" %e.args[0])
+                logging.critical("rfsoc [%s] returned the above error"\
+                        "retrying to set delays asap!" %rfsoc.host)
+                retry_fast = True
+                break
+            logging.debug("%s %i %.6f %.6f %.6f %.6f" \
                     %(rfsoc.host, int(ts[0].unix),
                         delay1_x[i]*1e9, rate_x[i]*1e9, phase_x[i], phase_rate_x[i]))
+        logging.info("Wrote delay/phase values and rates, waiting for 10 seconds")
 
+        if retry_fast:
+            continue
         time.sleep(10)
 
 
