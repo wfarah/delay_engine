@@ -1,6 +1,8 @@
 import numpy as np
 import toml
 
+import hashlib
+
 import logging
 
 from phasing import compute_uvw, compute_uvw_altaz
@@ -63,6 +65,50 @@ def parse_yaml(yaml_fname):
     raise NotImplementedError("yaml parsing not implemented yet")
 
 
+def load_bandpass(phases_file_name, antnames):
+    phases_all = pd.read_csv(phases_file_name, sep=" ", index_col=False)
+
+    phases_x = []
+    phases_y = []
+
+    for ant in np.char.lower(np.array(antnames)):
+        phases_x.append(phases_all[ant+"x"])
+        phases_y.append(phases_all[ant+"y"])
+
+    return phases_x, phases_y
+
+
+def load_fixed_delays(fixed_file_name, antnames):
+    fixed_delays_all = pd.read_csv(fixed_file_name, sep=" ", index_col=None)
+
+    fixed_delays_x = []
+    fixed_delays_y = []
+
+    for ant in np.char.lower(np.array(antnames)):
+        if ant not in list(fixed_delays_all.values[:,0]):
+            raise RuntimeError("Antenna %s not in the fixed delays list!" %ant)
+        fixed_delays_x.append(
+                fixed_delays_all[fixed_delays_all.values[:,0] == ant].values[:,1][0])
+        fixed_delays_y.append(
+                fixed_delays_all[fixed_delays_all.values[:,0] == ant].values[:,2][0])
+
+    fixed_delays_x = np.array(fixed_delays_x)*1e-9
+    fixed_delays_y = np.array(fixed_delays_y)*1e-9
+
+    return fixed_delays_x, fixed_delays_y
+
+
+def update_bandpass(rfsocs, phases_x, phases_y):
+    for rfsoc, phase_calx, phase_caly in zip(rfsocs, phases_x, phases_y):
+        rfsoc.set_phase_calibration(0, -phase_calx)
+        rfsoc.set_phase_calibration(1, -phase_caly)
+
+
+def get_hash(fname):
+    with open(fname, "rb") as f:
+        fhash = hashlib.md5(f.read()).hexdigest()
+    return fhash
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -117,8 +163,8 @@ def main():
 
     logging.info("Using LO: %s" %args.lo)
 
-    fixed_delays_all = pd.read_csv(args.fixed, sep=" ", index_col=None)
-    phases_all = pd.read_csv(args.phases, sep=" ", index_col=False)
+    #fixed_delays_all = pd.read_csv(args.fixed, sep=" ", index_col=None)
+    #phases_all = pd.read_csv(args.phases, sep=" ", index_col=False)
 
     logging.info("Using file [%s] for fixed delays" %args.fixed)
     logging.info("Using file [%s] for phase solutions" %args.phases)
@@ -145,31 +191,13 @@ def main():
     rfsoc_tab = snap_config.ATA_SNAP_TAB[
             snap_config.ATA_SNAP_TAB.LO == args.lo]
     rfsoc_hostnames = []
-    fixed_delays_x = []
-    fixed_delays_y = []
-
-    phases_x = []
-    phases_y = []
 
     # retrieve names of rfsoc instances
     for ant in np.char.lower(np.array(ANTNAMES)):
         if ant not in list(rfsoc_tab.ANT_name):
             raise RuntimeError("Antenna %s not in the rfsoc configuration!" %ant)
-        if ant not in list(fixed_delays_all.values[:,0]):
-            raise RuntimeError("Antenna %s not in the fixed delays list!" %ant)
         rfsoc_hostnames.append(
                 rfsoc_tab[rfsoc_tab.ANT_name == ant].snap_hostname.values[0])
-        fixed_delays_x.append(
-                fixed_delays_all[fixed_delays_all.values[:,0] == ant].values[:,1][0])
-        fixed_delays_y.append(
-                fixed_delays_all[fixed_delays_all.values[:,0] == ant].values[:,2][0])
-
-        phases_x.append(phases_all[ant+"x"])
-        phases_y.append(phases_all[ant+"y"])
-
-    fixed_delays_x = np.array(fixed_delays_x)*1e-9
-    fixed_delays_y = np.array(fixed_delays_y)*1e-9
-
 
     # initialise the rfsoc feng objects
     rfsocs = snap_control.init_snaps(rfsoc_hostnames)
@@ -178,10 +206,14 @@ def main():
         rfsoc.logger.setLevel(logging.INFO)
     logging.info("Read FPGA files")
 
+    fixed_delays_x, fixed_delays_y = load_fixed_delays(args.fixed, ANTNAMES)
+    phases_x, phases_y             = load_bandpass(args.phases, ANTNAMES)
+
+    hash_fixed  = get_hash(args.fixed)
+    hash_phases = get_hash(args.phases)
+
     if not args.nophase:
-        for rfsoc, phase_calx, phase_caly in zip(rfsocs, phases_x, phases_y):
-            rfsoc.set_phase_calibration(0, -phase_calx)
-            rfsoc.set_phase_calibration(1, -phase_caly)
+        update_bandpass(rfsocs, phases_x, phases_y)
     logging.info("Phase calibration solution set on RFSoCs")
 
 
@@ -228,7 +260,27 @@ def main():
     #lo_freq = args.lofreq
 
     while True:
-        print("New iteration")
+        print("New iteration for LO %s" %args.lo)
+
+        # checking for new delay solution
+        new_hash_fixed = get_hash(args.fixed)
+        if new_hash_fixed != hash_fixed:
+            logging.info("New delay solution detected, updating fixed delays")
+            print("New delay solution detected, updating fixed delays")
+            fixed_delays_x, fixed_delays_y = load_fixed_delays(args.fixed, ANTNAMES)
+            hash_fixed = new_hash_fixed
+
+        # checking for new phase solution
+        new_hash_phases = get_hash(args.phases)
+        if new_hash_phases != hash_phases:
+            logging.info("New phase solution detected, updating bandpass")
+            print("New phase solution detected, updating bandpass")
+            phases_x, phases_y = load_bandpass(args.phases, ANTNAMES)
+            hash_phases = new_hash_phases
+            update_bandpass(rfsocs, phases_x, phases_y)
+            print("Phases have been updated")
+            logging.info("Phases have been updated")
+
         # Parse the LO frequency automatically from the ata_control
         lo_freq = ata_control.get_sky_freq(args.lo)
 
