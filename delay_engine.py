@@ -20,13 +20,6 @@ from ATATools import ata_control
 
 from ATATools.ata_rest import ATARestException
 
-import atexit
-
-
-ANTNAMES = ['1C', '1K', '1H', '1E', '1G', 
-        '2A', '2B', '2C', '2H', '2E', '2J', '2K', '2L', '2M',
-        '4E', '3D', '3L',
-        '4G', '4J', '5B']
 ALL_LO = ["a", "b", "c", "d"]
         
 WD = os.path.realpath(os.path.dirname(__file__))
@@ -192,12 +185,8 @@ def main():
             snap_config.ATA_SNAP_TAB.LO == args.lo]
     rfsoc_hostnames = []
 
-    # retrieve names of rfsoc instances
-    for ant in np.char.lower(np.array(ANTNAMES)):
-        if ant not in list(rfsoc_tab.ANT_name):
-            raise RuntimeError("Antenna %s not in the rfsoc configuration!" %ant)
-        rfsoc_hostnames.append(
-                rfsoc_tab[rfsoc_tab.ANT_name == ant].snap_hostname.values[0])
+    rfsoc_hostnames = list(rfsoc_tab.snap_hostname)
+    antnames = [ant.upper() for ant in rfsoc_tab.ANT_name]
 
     # initialise the rfsoc feng objects
     rfsocs = snap_control.init_snaps(rfsoc_hostnames)
@@ -206,8 +195,8 @@ def main():
         rfsoc.logger.setLevel(logging.INFO)
     logging.info("Read FPGA files")
 
-    fixed_delays_x, fixed_delays_y = load_fixed_delays(args.fixed, ANTNAMES)
-    phases_x, phases_y             = load_bandpass(args.phases, ANTNAMES)
+    fixed_delays_x, fixed_delays_y = load_fixed_delays(args.fixed, antnames)
+    phases_x, phases_y             = load_bandpass(args.phases, antnames)
 
     hash_fixed  = get_hash(args.fixed)
     hash_phases = get_hash(args.phases)
@@ -237,7 +226,7 @@ def main():
 
     # Select reference antenna
     refant = args.refant.upper()
-    itrf_sub = itrf.loc[ANTNAMES]
+    itrf_sub = itrf.loc[antnames]
     irefant = itrf_sub.index.values.tolist().index(refant)
 
 
@@ -267,7 +256,7 @@ def main():
         if new_hash_fixed != hash_fixed:
             logging.info("New delay solution detected, updating fixed delays")
             print("New delay solution detected, updating fixed delays")
-            fixed_delays_x, fixed_delays_y = load_fixed_delays(args.fixed, ANTNAMES)
+            fixed_delays_x, fixed_delays_y = load_fixed_delays(args.fixed, antnames)
             hash_fixed = new_hash_fixed
 
         # checking for new phase solution
@@ -275,7 +264,7 @@ def main():
         if new_hash_phases != hash_phases:
             logging.info("New phase solution detected, updating bandpass")
             print("New phase solution detected, updating bandpass")
-            phases_x, phases_y = load_bandpass(args.phases, ANTNAMES)
+            phases_x, phases_y = load_bandpass(args.phases, antnames)
             hash_phases = new_hash_phases
             update_bandpass(rfsocs, phases_x, phases_y)
             print("Phases have been updated")
@@ -367,35 +356,12 @@ def main():
         rate_x = (delay2_x - delay1_x) / (tts[-1] - tts[0])
         rate_y = (delay2_y - delay1_y) / (tts[-1] - tts[0])
         
-        #print(ANTNAMES)
-        #print("")
-
-        # Print values to screen, for now
-        #print("Delay [ns]")
-        #print(delay1_x*1e9)
-        #print(delay1_y*1e9)
-        #print("")
-        #print("Delay rate [ns/s]")
-        #print(rate_x*1e9)
-        #print(rate_y*1e9)
 
         # Using LO - BW/2 for fringe rate
         phase_x      = -2 * np.pi * (lo_freq*1e6 - BANDWIDTH/2.) * delay1_x
         phase_rate_x = -2 * np.pi * (lo_freq*1e6 - BANDWIDTH/2.) * rate_x
         phase_y      = -2 * np.pi * (lo_freq*1e6 - BANDWIDTH/2.) * delay1_y
         phase_rate_y = -2 * np.pi * (lo_freq*1e6 - BANDWIDTH/2.) * rate_y
-
-        #print("")
-        #print("Phase [rad]")
-        #print(phase_x)
-        #print(phase_y)
-
-        #print("")
-        #print("Phase rate [rad/s]")
-        #print(phase_rate_x)
-        #print(phase_rate_y)
-
-        #print("="*79)
 
         if args.zero:
             logging.info("Scratch the above, we're only apply 0 delays")
