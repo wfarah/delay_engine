@@ -15,6 +15,8 @@ import time, os
 
 import argparse
 
+import requests
+
 from SNAPobs import snap_control, snap_config
 from ATATools import ata_control
 
@@ -271,7 +273,15 @@ def main():
             logging.info("Phases have been updated")
 
         # Parse the LO frequency automatically from the ata_control
-        lo_freq = ata_control.get_sky_freq(args.lo)
+        for i in range(5):
+            try:
+                lo_freq = ata_control.get_sky_freq(args.lo)
+            except requests.exceptions.ConnectionError as e:
+                logging.warning("Connection error obtained on get_sky_freq")
+                print("Connection error obtained on get_sky_freq")
+                time.sleep(1)
+                continue
+            break
 
         t = np.floor(time.time())
         tts = [3, 20+3] # Interpolate between t=3 sec and t=20 sec
@@ -287,13 +297,31 @@ def main():
                     itrf_sub[['x','y','z']].values[irefant])
 
         if source_type == "radec_auto":
-            source_eph = ata_control.get_eph_source([refant.lower()])[refant.lower()]
+            for i in range(5):
+                try:
+                    source_eph = ata_control.get_eph_source([refant.lower()])[refant.lower()]
+                except requests.exceptions.ConnectionError as e:
+                    logging.warning("Connection error obtained on get_eph_source")
+                    print("Connection error obtained on get_eph_source")
+                    time.sleep(1)
+                    continue
+                break
+
             print("Source ephemeris: %s" %source_eph)
             try:
                 # Try getting the ra dec of the source using the ephemeris file name
                 # This will fail if we are tracking a non-sidereal source
                 # or a custom RA/Dec pair
-                ra, dec = ata_control.get_source_ra_dec(source_eph)
+                for i in range(5):
+                    try:
+                        ra, dec = ata_control.get_source_ra_dec(source_eph)
+                    except requests.exceptions.ConnectionError as e:
+                        logging.warning("Connection error obtained on get_source_ra_dec")
+                        print("Connection error obtained on get_source_ra_dec")
+                        time.sleep(1)
+                        continue
+                    break
+
             except ATARestException as e:
                 # These are a bit off because we are using ra/dec values that have been
                 # refraction corrected. Offsets are pretty small (sub-arcsecond), so
@@ -302,7 +330,15 @@ def main():
                         "using antenna get_ra_dec")
                 print("Couldn't Couldn't parse ra/dec from get_source_ra_dec, "\
                         "using antenna get_ra_dec")
-                ra, dec = ata_control.get_ra_dec([refant.lower()])[refant.lower()]
+                for i in range(5):
+                    try:
+                        ra, dec = ata_control.get_ra_dec([refant.lower()])[refant.lower()]
+                    except requests.exceptions.ConnectionError as e:
+                        logging.warning("Connection error obtained on get_ra_dec")
+                        print("Connection error obtained on get_ra_dec")
+                        time.sleep(1)
+                        continue
+                    break
             ra *= 360 / 24.
             source = SkyCoord(ra, dec, unit='deg')
             logging.info("Obtained source name [%s] and coords (RA,Dec) = (%.6f,%.6f) "\
