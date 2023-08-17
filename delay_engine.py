@@ -123,9 +123,9 @@ def main():
     #parser.add_argument('-lofreq', type=float, required=True,
     #    help = 'LO frequency [MHz]')
     parser.add_argument('-refant', type=str,
-        default = DEFAULT_REF_ANT,
+        required = False,
         help = 'Reference antenna [%s]' %DEFAULT_REF_ANT)
-    parser.add_argument('-itrf', type=str,
+    parser.add_argument('-telinfo', type=str,
         default = DEFAULT_ANT_ITRF, required = False,
         help = 'ITRF file [default: %s]' %DEFAULT_ANT_ITRF)
     parser.add_argument('-fixed', required = False, type=str,
@@ -197,39 +197,9 @@ def main():
         rfsoc.logger.setLevel(logging.INFO)
     logging.info("Read FPGA files")
 
-    fixed_delays_x, fixed_delays_y = load_fixed_delays(args.fixed, antnames)
-    phases_x, phases_y             = load_bandpass(args.phases, antnames)
-
-    hash_fixed  = get_hash(args.fixed)
-    hash_phases = get_hash(args.phases)
-
-    if not args.nophase:
-        update_bandpass(rfsocs, phases_x, phases_y)
-    logging.info("Phase calibration solution set on RFSoCs")
-
-
-    # Get ITRF coordinates of the antennas
-    # and define antenna positions
-    if args.itrf.endswith("toml") or args.itrf.endswith("tml"):
-        telinfo = toml.load(args.itrf)
-        itrf = parse_toml(telinfo)
-        ata = EarthLocation(lat= telinfo['latitude'],
-                lon= telinfo['longitude'], height= float(telinfo['altitude']))
-        logging.info("Loaded TOML file [%s]" %args.itrf)
-    elif args.itrf.endswith("yaml") or args.itrf.endswith("yml"):
-        telinfo = yaml.load(args.itrf)
-        itrf = parse_yaml(telinfo)
-        ata = EarthLocation(lat = telinfo['latitude'],
-                lon= telinfo['longitude'], height= float(telinfo['altitude']))
-    elif args.itrf.endswith("txt"):
-        itrf = pd.read_csv(args.itrf, names=['x', 'y', 'z'], header=None, skiprows=1)
-        # this is hardcoded for now
-        ata = EarthLocation(lat= "40:49:03.0", lon= "-121:28:24.0", height= 1008)
-
-    # Select reference antenna
-    refant = args.refant.upper()
-    itrf_sub = itrf.loc[antnames]
-    irefant = itrf_sub.index.values.tolist().index(refant)
+    hash_fixed   = ""
+    hash_phases  = ""
+    hash_telinfo = ""
 
 
     # Parse phase center coordinates
@@ -252,6 +222,42 @@ def main():
 
     while True:
         print("New iteration for LO %s" %args.lo)
+        new_hash_telinfo = get_hash(args.telinfo)
+        if new_hash_telinfo != hash_telinfo:
+            logging.info("New telinfo detected, updating values")
+            print("New telinfo detected, updating values")
+            # Get ITRF coordinates of the antennas
+            # and define antenna positions
+            if args.telinfo.endswith("toml") or args.telinfo.endswith("tml"):
+                telinfo = toml.load(args.telinfo)
+                itrf = parse_toml(telinfo)
+                ata = EarthLocation(lat= telinfo['latitude'],
+                        lon= telinfo['longitude'], height= float(telinfo['altitude']))
+                logging.info("Loaded TOML file [%s]" %args.telinfo)
+            elif args.telinfo.endswith("yaml") or args.telinfo.endswith("yml"):
+                telinfo = yaml.load(args.telinfo)
+                itrf = parse_yaml(telinfo)
+                ata = EarthLocation(lat = telinfo['latitude'],
+                        lon= telinfo['longitude'], height= float(telinfo['altitude']))
+            elif args.telinfo.endswith("txt"):
+                itrf = pd.read_csv(args.telinfo,
+                        names=['x', 'y', 'z'], header=None, skiprows=1)
+                # this is hardcoded for now
+                ata = EarthLocation(lat= "40:49:03.0", lon= "-121:28:24.0", height= 1008)
+
+            # Select reference antenna
+            if args.refant:
+                refant = args.refant.upper()
+            elif 'reference_antenna_name' in telinfo:
+                refant = telinfo['reference_antenna_name'].upper()
+            else:
+                refant = DEFAULT_REF_ANT
+
+            logging.info("Using %s as reference antenna" %refant)
+            print("Using %s as reference antenna" %refant)
+            itrf_sub = itrf.loc[antnames]
+            irefant = itrf_sub.index.values.tolist().index(refant)
+            hash_telinfo = new_hash_telinfo
 
         # checking for new delay solution
         new_hash_fixed = get_hash(args.fixed)
