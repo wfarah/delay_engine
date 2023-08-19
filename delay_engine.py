@@ -149,7 +149,7 @@ def main():
     assert args.lo in ALL_LO,\
             "Input correct LO letter (input: %s)" %args.lo
 
-    logname = 'delay_engine_%s.log' %args.lo
+    logname = '/opt/mnt/log/delay_engine_%s.log' %args.lo
     logging.basicConfig(filename=logname, filemode='a',
             format='%(asctime)s %(levelname)s:%(message)s',
             level=logging.INFO)
