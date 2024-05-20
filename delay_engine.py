@@ -9,6 +9,7 @@ from phasing import compute_uvw, compute_uvw_altaz
 import astropy.constants as const
 from astropy.coordinates import ITRS, SkyCoord, AltAz, EarthLocation
 from astropy.time import Time,TimeDelta
+from astroquery.jplhorizons import Horizons
 import astropy.units as u
 import pandas as pd
 import time, os
@@ -37,6 +38,9 @@ MAX_DELAY = MAX_SAMP_DELAY * ADC_SAMP_TIME #seconds
 ADVANCE_TIME = MAX_DELAY/2
 
 BANDWIDTH = CLOCK_FREQ/2. #Hz
+
+# Needed for JPL Horizons
+location = 'Hat Creek Observatory (Allen Array)'
 
 
 def parse_toml(toml_dict):
@@ -103,6 +107,20 @@ def get_hash(fname):
     with open(fname, "rb") as f:
         fhash = hashlib.md5(f.read()).hexdigest()
     return fhash
+
+
+def unix2jd(unix):
+    """
+    convert unix time second to julian date
+    """
+    jd = unix / 86400 + 2440587.5
+    return jd
+
+def jd2unix(jd):
+    """
+    convert julian date to unix time second
+    """
+    unix = (jd - 2440587.5) * 86400
 
 
 def main():
@@ -320,38 +338,66 @@ def main():
                 # or a custom RA/Dec pair
                 for i in range(5):
                     try:
-                        ra, dec = ata_control.get_source_ra_dec(source_eph)
+                        ra1, dec1 = ata_control.get_source_ra_dec(source_eph)
+                        ra2, dec2 = ra1, dec1
                     except requests.exceptions.ConnectionError as e:
                         logging.warning("Connection error obtained on get_source_ra_dec")
                         print("Connection error obtained on get_source_ra_dec")
+                        print(e)
                         time.sleep(1)
                         continue
                     break
 
             except ATARestException as e:
-                # These are a bit off because we are using ra/dec values that have been
-                # refraction corrected. Offsets are pretty small (sub-arcsecond), so
-                # not too major for the ATA
-                logging.warning("Couldn't parse ra/dec from get_source_ra_dec, "\
-                        "using antenna get_ra_dec")
-                print("Couldn't Couldn't parse ra/dec from get_source_ra_dec, "\
-                        "using antenna get_ra_dec")
-                for i in range(5):
-                    try:
-                        ra, dec = ata_control.get_ra_dec([refant.lower()])[refant.lower()]
-                    except requests.exceptions.ConnectionError as e:
-                        logging.warning("Connection error obtained on get_ra_dec")
-                        print("Connection error obtained on get_ra_dec")
-                        time.sleep(1)
-                        continue
-                    break
-            ra *= 360 / 24.
-            source = SkyCoord(ra, dec, unit='deg')
+                # Let's try JPL Horizons first
+                # ASSUMPTIONS:
+                #     - Source eph name starts with "JPLH_"
+                #     - Spaces are replaced with "_" because the ATA does not
+                #       like spaces in the eph names
+                if source_eph.upper().startswith("JPLH_"):
+                    target = source_eph.replace("_", " ")
+                    target = target.replace("JPLH ", "")
+                    tts_jd = unix2jd(tts)
+
+                    obj = Horizons(id=target, location=location,
+                            epochs=tts_jd)
+
+                    eph = obj.ephemerides()
+                    ra1, ra2   = eph['RA']
+                    dec1, dec2 = eph['DEC']
+                    # kinda silly but I have to convert to hours
+                    # and then back to convert back to degrees below
+                    ra1, ra2 = ra1 / 360 * 24, ra2 / 360 * 24
+                    print("Got a JPL Horizons source: %s" %target)
+
+                else:
+                    # JPL Horizons didn't work, so pull the RA/DEC from antenna
+                    # These are a bit off because we are using ra/dec values that have been
+                    # refraction corrected. Offsets are pretty small (sub-arcsecond), so
+                    # not too major for the ATA
+                    logging.warning("Couldn't parse ra/dec from get_source_ra_dec, "\
+                            "using antenna get_ra_dec")
+                    print("Couldn't Couldn't parse ra/dec from get_source_ra_dec, "\
+                            "using antenna get_ra_dec")
+                    for i in range(5):
+                        try:
+                            ra1, dec1 = ata_control.get_ra_dec([refant.lower()])[refant.lower()]
+                            ra2, dec2 = ra1, dec1
+                        except requests.exceptions.ConnectionError as e:
+                            logging.warning("Connection error obtained on get_ra_dec")
+                            print("Connection error obtained on get_ra_dec")
+                            time.sleep(1)
+                            continue
+                        break
+            ra1 *= 360 / 24.
+            ra2 *= 360 / 24.
+            source1 = SkyCoord(ra1, dec1, unit='deg')
+            source2 = SkyCoord(ra2, dec2, unit='deg')
             logging.info("Obtained source name [%s] and coords (RA,Dec) = (%.6f,%.6f) "\
-                    "from backend" %(source_eph, ra, dec))
-            uvw1 = compute_uvw(ts[0],  source, itrf_sub[['x','y','z']],
+                    "from backend" %(source_eph, ra1, dec1))
+            uvw1 = compute_uvw(ts[0],  source1, itrf_sub[['x','y','z']],
                     itrf_sub[['x','y','z']].values[irefant])
-            uvw2 = compute_uvw(ts[-1], source, itrf_sub[['x','y','z']],
+            uvw2 = compute_uvw(ts[-1], source2, itrf_sub[['x','y','z']],
                     itrf_sub[['x','y','z']].values[irefant])
 
         elif source_type == "altaz":
