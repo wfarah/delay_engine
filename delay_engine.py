@@ -331,11 +331,11 @@ def main():
             hash_phases = new_hash_phases
             ttt = time.time()
             update_bandpass(rfsocs, phases_x, phases_y)
-            print("update bandpass took: " time.time() - ttt)
+            print("update bandpass took: ", time.time() - ttt)
 
             ttt = time.time()
             update_bandpass_old(rfsocs, phases_x, phases_y)
-            print("old update bandpass tool: " time.time() - ttt)
+            print("old update bandpass tool: ", time.time() - ttt)
 
             print("Phases have been updated")
             logging.info("Phases have been updated")
