@@ -6,6 +6,7 @@ import hashlib
 import logging
 
 from multiprocessing.pool import ThreadPool
+from multiprocessing import Pool
 
 from phasing import compute_uvw, compute_uvw_altaz
 import astropy.constants as const
@@ -122,8 +123,8 @@ def update_bandpass(rfsocs, phases_x, phases_y):
         to_map.append(mapping_dict)
 
     print(to_map)
-    # multithread this because it mainly blocks on IO
-    pool = ThreadPool(processes = NPROCS)
+    # multiprocess this because it mainly blocks on IO
+    pool = Pool(processes = NPROCS)
     pool.map(_update_bandpass_threaded, to_map)
 
 
