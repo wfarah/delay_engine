@@ -111,8 +111,9 @@ def update_bandpass(rfsocs, phases_x, phases_y):
         phases_x_map = []
         phases_y_map = []
         for i in range(len(rfsocs)):
+            rfsoc = rfsocs[i]
             if rfsoc.host.startswith(base_rfsoc):
-                rfsocs_map.append(rfsocs[i])
+                rfsocs_map.append(rfsoc)
                 phases_x_map.append(phases_x[i])
                 phases_y_map.append(phases_y[i])
         mapping_dict = {'rfsoc': rfsocs_map,
