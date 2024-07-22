@@ -102,6 +102,7 @@ def load_fixed_delays(fixed_file_name, antnames):
 
 def update_bandpass_old(rfsocs, phases_x, phases_y):
     for rfsoc, phase_calx, phase_caly in zip(rfsocs, phases_x, phases_y):
+        print(rfsoc.host)
         rfsoc.set_phase_calibration(0, -phase_calx)
         rfsoc.set_phase_calibration(1, -phase_caly)
 
@@ -125,7 +126,6 @@ def update_bandpass(rfsocs, phases_x, phases_y):
                         'phases_y': phases_y_map}
         to_map.append(mapping_dict)
 
-    print(to_map)
     # multithread this because it mainly blocks on IO
     pool = ThreadPool(processes = NPROCS)
     pool.map(_update_bandpass_threaded, to_map)
@@ -136,6 +136,7 @@ def _update_bandpass_threaded(rfsoc_phase_cals):
     phases_x = rfsoc_phase_cals['phases_x']
     phases_y = rfsoc_phase_cals['phases_y']
     for rfsoc, phase_calx, phase_caly in zip(rfsocs, phases_x, phases_y):
+        print(rfsoc.host)
         rfsoc.set_phase_calibration(0, -phase_calx)
         rfsoc.set_phase_calibration(1, -phase_caly)
 
