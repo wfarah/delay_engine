@@ -102,7 +102,6 @@ def load_fixed_delays(fixed_file_name, antnames):
 
 def update_bandpass_old(rfsocs, phases_x, phases_y):
     for rfsoc, phase_calx, phase_caly in zip(rfsocs, phases_x, phases_y):
-        print(rfsoc.host)
         rfsoc.set_phase_calibration(0, -phase_calx)
         rfsoc.set_phase_calibration(1, -phase_caly)
 
@@ -330,14 +329,7 @@ def main():
             print("New phase solution detected, updating bandpass")
             phases_x, phases_y = load_bandpass(args.phases, antnames)
             hash_phases = new_hash_phases
-            ttt = time.time()
-            update_bandpass(rfsocs, phases_x, phases_y)
-            print("update bandpass took: ", time.time() - ttt)
-
-            ttt = time.time()
             update_bandpass_old(rfsocs, phases_x, phases_y)
-            print("old update bandpass tool: ", time.time() - ttt)
-
             print("Phases have been updated")
             logging.info("Phases have been updated")
 
