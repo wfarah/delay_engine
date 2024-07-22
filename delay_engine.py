@@ -131,10 +131,12 @@ def _update_bandpass_threaded(rfsoc_phase_cals):
     rfsocs   = rfsoc_phase_cals['rfsoc']
     phases_x = rfsoc_phase_cals['phases_x']
     phases_y = rfsoc_phase_cals['phases_y']
-
+    print("got update_bandpass for rfsocs:")
+    print(rfsocs)
     for rfsoc, phase_calx, phase_caly in zip(rfsocs, phases_x, phases_y):
         rfsoc.set_phase_calibration(0, -phase_calx)
         rfsoc.set_phase_calibration(1, -phase_caly)
+    print("Done")
 
 
 def get_hash(fname):
