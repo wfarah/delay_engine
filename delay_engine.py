@@ -5,6 +5,8 @@ import hashlib
 
 import logging
 
+from multiprocessing.pool import ThreadPool
+
 from phasing import compute_uvw, compute_uvw_altaz
 import astropy.constants as const
 from astropy.coordinates import ITRS, SkyCoord, AltAz, EarthLocation
@@ -22,6 +24,8 @@ from SNAPobs import snap_control, snap_config
 from ATATools import ata_control
 
 from ATATools.ata_rest import ATARestException
+
+NPROCS = 10 # number of CPU threads for bandpass update
 
 ALL_LO = ["a", "b", "c", "d"]
         
@@ -98,6 +102,35 @@ def load_fixed_delays(fixed_file_name, antnames):
 
 
 def update_bandpass(rfsocs, phases_x, phases_y):
+    to_map = []
+    rfsoc_hostnames = [rfsoc.host for rfsoc in rfsocs]
+    base_rfsoc_hnm  = np.unique([i[:-7] for i in rfsoc_hostnames])
+
+    for base_rfsoc in base_rfsoc_hnm:
+        rfsocs_map = []
+        phases_x_map = []
+        phases_y_map = []
+        for i in range(len(rfsocs)):
+            if rfsoc.host.startswith(base_rfsoc):
+                rfsocs_map.append(rfsocs[i])
+                phases_x_map.append(phases_x[i])
+                phases_y_map.append(phases_y[i])
+        mapping_dict = {'rfsoc': rfsocs_map,
+                        'phases_x': phases_x_map,
+                        'phases_y': phases_y_map}
+        to_map.append(mapping_dict)
+
+    print(to_map)
+    # multithread this because it mainly blocks on IO
+    pool = ThreadPool(processes = NPROCS)
+    pool.map(_update_bandpass_threaded, to_map)
+
+
+def _update_bandpass_threaded(rfsoc_phase_cals):
+    rfsocs   = rfsoc_phase_cals['rfsoc']
+    phases_x = rfsoc_phase_cals['phases_x']
+    phases_y = rfsoc_phase_cals['phases_y']
+
     for rfsoc, phase_calx, phase_caly in zip(rfsocs, phases_x, phases_y):
         rfsoc.set_phase_calibration(0, -phase_calx)
         rfsoc.set_phase_calibration(1, -phase_caly)
