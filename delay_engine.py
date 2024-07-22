@@ -6,7 +6,6 @@ import hashlib
 import logging
 
 from multiprocessing.pool import ThreadPool
-from multiprocessing import Pool
 
 from phasing import compute_uvw, compute_uvw_altaz
 import astropy.constants as const
@@ -101,6 +100,10 @@ def load_fixed_delays(fixed_file_name, antnames):
 
     return fixed_delays_x, fixed_delays_y
 
+def update_bandpass_old(rfsocs, phases_x, phases_y):
+    for rfsoc, phase_calx, phase_caly in zip(rfsocs, phases_x, phases_y):
+        rfsoc.set_phase_calibration(0, -phase_calx)
+        rfsoc.set_phase_calibration(1, -phase_caly)
 
 def update_bandpass(rfsocs, phases_x, phases_y):
     to_map = []
@@ -123,8 +126,8 @@ def update_bandpass(rfsocs, phases_x, phases_y):
         to_map.append(mapping_dict)
 
     print(to_map)
-    # multiprocess this because it mainly blocks on IO
-    pool = Pool(processes = NPROCS)
+    # multithread this because it mainly blocks on IO
+    pool = ThreadPool(processes = NPROCS)
     pool.map(_update_bandpass_threaded, to_map)
 
 
@@ -132,12 +135,9 @@ def _update_bandpass_threaded(rfsoc_phase_cals):
     rfsocs   = rfsoc_phase_cals['rfsoc']
     phases_x = rfsoc_phase_cals['phases_x']
     phases_y = rfsoc_phase_cals['phases_y']
-    print("got update_bandpass for rfsocs:")
-    print(rfsocs)
     for rfsoc, phase_calx, phase_caly in zip(rfsocs, phases_x, phases_y):
         rfsoc.set_phase_calibration(0, -phase_calx)
         rfsoc.set_phase_calibration(1, -phase_caly)
-    print("Done")
 
 
 def get_hash(fname):
@@ -329,7 +329,14 @@ def main():
             print("New phase solution detected, updating bandpass")
             phases_x, phases_y = load_bandpass(args.phases, antnames)
             hash_phases = new_hash_phases
+            ttt = time.time()
             update_bandpass(rfsocs, phases_x, phases_y)
+            print("update bandpass took: " time.time() - ttt)
+
+            ttt = time.time()
+            update_bandpass_old(rfsocs, phases_x, phases_y)
+            print("old update bandpass tool: " time.time() - ttt)
+
             print("Phases have been updated")
             logging.info("Phases have been updated")
 
