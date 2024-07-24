@@ -12,3 +12,9 @@ First go at delay engine for the ATA
 The below will print to screen delay, delay_rate, phase and phase_rate for the source CasA
 
 `python print_t_dt.py -source_ra 23.391 -source_dec 58.808 -lo 1400`
+
+# NOTE:
+The delay engine has now officially been placed in the `ATA-Utils` repository
+
+===    This repo is deprecated    ===
+-----------------------------------------
